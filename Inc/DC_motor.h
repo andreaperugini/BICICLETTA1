@@ -24,6 +24,8 @@ int Voltage2Direction(float);
 
 float Voltage2Duty(float);
 uint8_t Ref2Direction(float);
-void set_PWM_and_dir(float, uint8_t);
+void set_PWM_and_dir_back_wheel(float, uint8_t);
+void set_PWM_and_dir_front_wheel(float, uint8_t);
+
 
 #endif /* INC_DC_MOTOR_H_ */
