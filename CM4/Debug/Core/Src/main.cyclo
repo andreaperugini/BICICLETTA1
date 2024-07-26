@@ -1,0 +1,16 @@
+../Core/Src/main.c:189:7:getSpeed	2
+../Core/Src/main.c:206:5:main	6
+../Core/Src/main.c:464:13:MX_ADC1_Init	4
+../Core/Src/main.c:532:6:MX_ETH_Init	2
+../Core/Src/main.c:581:13:MX_I2C1_Init	4
+../Core/Src/main.c:629:13:MX_TIM1_Init	7
+../Core/Src/main.c:709:13:MX_TIM2_Init	4
+../Core/Src/main.c:754:13:MX_TIM3_Init	6
+../Core/Src/main.c:813:13:MX_TIM4_Init	3
+../Core/Src/main.c:862:13:MX_USART3_UART_Init	5
+../Core/Src/main.c:910:6:MX_GPIO_Init	1
+../Core/Src/main.c:964:6:HAL_GPIO_EXTI_Callback	2
+../Core/Src/main.c:973:6:HAL_TIM_PeriodElapsedCallback	3
+../Core/Src/main.c:988:5:__io_putchar	1
+../Core/Src/main.c:992:5:__io_getchar	1
+../Core/Src/main.c:1007:6:Error_Handler	1

@@ -1,0 +1,4 @@
+../Core/Src/kalman.c:22:6:kalman_filter_init	24	static
+../Core/Src/kalman.c:43:6:printMatrix	24	static
+../Core/Src/kalman.c:56:6:kalman_predict	120	static
+../Core/Src/kalman.c:89:6:kalman_update	376	static
