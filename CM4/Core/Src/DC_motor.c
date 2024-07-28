@@ -60,9 +60,8 @@ void set_PWM_and_dir_front_wheel (float duty, uint8_t dir){
 	TIM3 -> CCR1 = (duty/100)*TIM3->ARR;
 
 	if (dir == 0){
-		HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, GPIO_PIN_RESET); //da rimettere il 5
-
+		HAL_GPIO_WritePin (GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 	}else if (dir == 1){
-		HAL_GPIO_WritePin (GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+		HAL_GPIO_WritePin (GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 	}
 }

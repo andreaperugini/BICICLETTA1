@@ -4,4 +4,4 @@
 ../Core/Src/main.c:282:6:MX_USART3_UART_Init	5
 ../Core/Src/main.c:330:13:MX_USB_OTG_FS_PCD_Init	2
 ../Core/Src/main.c:366:13:MX_GPIO_Init	1
-../Core/Src/main.c:391:6:Error_Handler	1
+../Core/Src/main.c:390:6:Error_Handler	1

@@ -179,6 +179,7 @@ static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void MX_GPIO_Init(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -232,7 +233,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  MX_GPIO_Init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN SysInit */
@@ -415,6 +416,9 @@ int main(void)
 					kalman_update(&kf, &z);
 					filtered_current = x_data[1];
 
+					//idea di trovare il modello del processo dello sterzo(quindi modello sterzo+motore) tramite risposta indiciale, poi dare come misura la I ottenuta dalla equazione dinamica
+
+
 					//calcolo coppia
 					torque = filtered_current * K;
 
@@ -429,22 +433,16 @@ int main(void)
 					printf("coppia des: %.3f", desired_torque);
 					printf("coppia: %.3f \r\n", torque);
 					*/
+					printf("u_front_wheel: %.3f ", u_front_wheel);
 
 
 					u_front_wheel = PID_controller(&pid_steering_torque, torque,
 							desired_torque);
-
-
-
 					duty_front_wheel = Voltage2Duty(u_front_wheel);
 					dir_front_wheel = Ref2Direction(u_front_wheel);
-					printf("dir: %.3f\r\n", dir_front_wheel);
 					set_PWM_and_dir_front_wheel(duty_front_wheel,
 							dir_front_wheel);
-					HAL_GPIO_WritePin (GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
-					HAL_Delay(1000);
-					HAL_GPIO_WritePin (GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
-					HAL_Delay(1000);
+					printf("dir_front_wheel %.3f \r\n",dir_front_wheel);
 
 					//******************************
 
@@ -921,10 +919,7 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_15, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
@@ -935,8 +930,8 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA4 PA5 PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_15;
+  /*Configure GPIO pins : PA4 PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

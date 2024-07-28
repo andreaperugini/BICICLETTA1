@@ -17,7 +17,7 @@
 #include <PID.h>
 
 #define PI 3.14
-#define V_MAX 10
+#define V_MAX 18
 
 float DegreeSec2RPM(float);
 int Voltage2Direction(float);
