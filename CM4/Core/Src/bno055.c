@@ -130,7 +130,7 @@ void bno055_setup() {
   uint8_t id = 0;
   bno055_readData(BNO055_CHIP_ID, &id, 1);
   if (id != BNO055_ID) {
-    printf("Can't find BNO055, id: 0x%02x. Please check your wiring.\r\n", id);
+    //printf("Can't find BNO055, id: 0x%02x. Please check your wiring.\r\n", id);
   }
   bno055_setPage(0);
   bno055_writeData(BNO055_SYS_TRIGGER, 0x0);
@@ -189,11 +189,11 @@ bno055_self_test_result_t bno055_getSelfTestResult() {
   uint8_t sys_trigger_value;
   bno055_readData(BNO055_SYS_TRIGGER, &sys_trigger_value, 1);
   // Stampa il valore del bit meno significativo prima della scrittura
-  printf("Bit meno significativo prima della scrittura: %d\r\n", sys_trigger_value & 0x01);
+  //printf("Bit meno significativo prima della scrittura: %d\r\n", sys_trigger_value & 0x01);
   // Imposta il bit del Self-Test
   sys_trigger_value |= 0x01; // Bit 0: Self-Test
   // Stampa il valore del bit meno significativo dopo la scrittura
-  printf("Bit meno significativo dopo la scrittura: %d\r\n", sys_trigger_value & 0x01);
+  //printf("Bit meno significativo dopo la scrittura: %d\r\n", sys_trigger_value & 0x01);
   // Scrive il valore modificato nel registro SYS_TRIGGER
   bno055_writeData(BNO055_SYS_TRIGGER, sys_trigger_value);
 
@@ -366,58 +366,58 @@ void bno055_writeData(uint8_t reg, uint8_t data) {
   }
 
   if (status == HAL_ERROR) {
-    printf("HAL_I2C_Master_Transmit HAL_ERROR\r\n");
+    //printf("HAL_I2C_Master_Transmit HAL_ERROR\r\n");
   } else if (status == HAL_TIMEOUT) {
-    printf("HAL_I2C_Master_Transmit HAL_TIMEOUT\r\n");
+    //printf("HAL_I2C_Master_Transmit HAL_TIMEOUT\r\n");
   } else if (status == HAL_BUSY) {
-    printf("HAL_I2C_Master_Transmit HAL_BUSY\r\n");
+    //printf("HAL_I2C_Master_Transmit HAL_BUSY\r\n");
   } else {
-    printf("Unknown status data %d", status);
+    //printf("Unknown status data %d", status);
   }
 
   uint32_t error = HAL_I2C_GetError(_bno055_i2c_port);
   if (error == HAL_I2C_ERROR_NONE) {
     return;
   } else if (error == HAL_I2C_ERROR_BERR) {
-    printf("HAL_I2C_ERROR_BERR\r\n");
+    //printf("HAL_I2C_ERROR_BERR\r\n");
   } else if (error == HAL_I2C_ERROR_ARLO) {
-    printf("HAL_I2C_ERROR_ARLO\r\n");
+    //printf("HAL_I2C_ERROR_ARLO\r\n");
   } else if (error == HAL_I2C_ERROR_AF) {
-    printf("HAL_I2C_ERROR_AF\r\n");
+    //printf("HAL_I2C_ERROR_AF\r\n");
   } else if (error == HAL_I2C_ERROR_OVR) {
-    printf("HAL_I2C_ERROR_OVR\r\n");
+    //printf("HAL_I2C_ERROR_OVR\r\n");
   } else if (error == HAL_I2C_ERROR_DMA) {
-    printf("HAL_I2C_ERROR_DMA\r\n");
+    //printf("HAL_I2C_ERROR_DMA\r\n");
   } else if (error == HAL_I2C_ERROR_TIMEOUT) {
-    printf("HAL_I2C_ERROR_TIMEOUT\r\n");
+    //printf("HAL_I2C_ERROR_TIMEOUT\r\n");
   }
 
   HAL_I2C_StateTypeDef state = HAL_I2C_GetState(_bno055_i2c_port);
   if (state == HAL_I2C_STATE_RESET) {
-    printf("HAL_I2C_STATE_RESET\r\n");
+    //printf("HAL_I2C_STATE_RESET\r\n");
   } else if (state == HAL_I2C_STATE_READY) {
-    printf("HAL_I2C_STATE_RESET\r\n");
+    //printf("HAL_I2C_STATE_RESET\r\n");
   } else if (state == HAL_I2C_STATE_BUSY) {
-    printf("HAL_I2C_STATE_BUSY\r\n");
+    //printf("HAL_I2C_STATE_BUSY\r\n");
   } else if (state == HAL_I2C_STATE_BUSY_TX) {
-    printf("HAL_I2C_STATE_BUSY_TX\r\n");
+    //printf("HAL_I2C_STATE_BUSY_TX\r\n");
   } else if (state == HAL_I2C_STATE_BUSY_RX) {
-    printf("HAL_I2C_STATE_BUSY_RX\r\n");
+    //printf("HAL_I2C_STATE_BUSY_RX\r\n");
   } else if (state == HAL_I2C_STATE_LISTEN) {
-    printf("HAL_I2C_STATE_LISTEN\r\n");
+    //printf("HAL_I2C_STATE_LISTEN\r\n");
   } else if (state == HAL_I2C_STATE_BUSY_TX_LISTEN) {
-    printf("HAL_I2C_STATE_BUSY_TX_LISTEN\r\n");
+    //printf("HAL_I2C_STATE_BUSY_TX_LISTEN\r\n");
   } else if (state == HAL_I2C_STATE_BUSY_RX_LISTEN) {
-    printf("HAL_I2C_STATE_BUSY_RX_LISTEN\r\n");
+    //printf("HAL_I2C_STATE_BUSY_RX_LISTEN\r\n");
   } else if (state == HAL_I2C_STATE_ABORT) {
-    printf("HAL_I2C_STATE_ABORT\r\n");
+    //printf("HAL_I2C_STATE_ABORT\r\n");
   }
 
   /*  non funzionante non so perche
   else if (state == HAL_I2C_STATE_TIMEOUT) {
-    printf("HAL_I2C_STATE_TIMEOUT\r\n");
+    //printf("HAL_I2C_STATE_TIMEOUT\r\n");
   } else if (state == HAL_I2C_STATE_ERROR) {
-    printf("HAL_I2C_STATE_ERROR\r\n");
+    //printf("HAL_I2C_STATE_ERROR\r\n");
     */
 
 
@@ -437,13 +437,13 @@ void bno055_readData(uint8_t reg, uint8_t *data, uint8_t len) {
 	  }
 
 	  if (ret == HAL_ERROR) {
-	    printf("HAL_I2C_Master_Transmit HAL_ERROR\r\n");
+	    //printf("HAL_I2C_Master_Transmit HAL_ERROR\r\n");
 	  } else if (ret == HAL_TIMEOUT) {
-	    printf("HAL_I2C_Master_Transmit HAL_TIMEOUT\r\n");
+	    //printf("HAL_I2C_Master_Transmit HAL_TIMEOUT\r\n");
 	  } else if (ret == HAL_BUSY) {
-	    printf("HAL_I2C_Master_Transmit HAL_BUSY\r\n");
+	    //printf("HAL_I2C_Master_Transmit HAL_BUSY\r\n");
 	  } else {
-	    printf("Unknown status data %d", ret);
+	    //printf("Unknown status data %d", ret);
 	  }
   // HAL_I2C_Mem_Read(_bno055_i2c_port, BNO055_I2C_ADDR_LO<<1, reg,
   // I2C_MEMADD_SIZE_8BIT, data, len, 100);
@@ -474,7 +474,7 @@ void bno055_configureAccelerometer(uint8_t gRange, float bandwidth, uint8_t oper
     } else if (gRange == 16) {
         accConfigReg |= 3 ;  // [ACC_Config]: xxxxxx11b
     } else {
-        printf("Errore: G Range acc non valido\r\n");
+        //printf("Errore: G Range acc non valido\r\n");
         return;
     }
 
@@ -495,7 +495,7 @@ void bno055_configureAccelerometer(uint8_t gRange, float bandwidth, uint8_t oper
     } else if (bandwidth == 1000) {
         accConfigReg |= (7 << 2);  // [ACC_Config]: xxx111xxb
     } else {
-        printf("Errore: Bandwidth acc non valido\r\n");
+        //printf("Errore: Bandwidth acc non valido\r\n");
         return;
     }
 
@@ -512,7 +512,7 @@ void bno055_configureAccelerometer(uint8_t gRange, float bandwidth, uint8_t oper
     } else if (operationMode == DEEP_SUSPEND) {
         accConfigReg |= (5 << 5);  // [ACC_Config]: 101xxxxxb
     } else {
-        printf("Errore: Modalità di funzionamento acc non valida\r\n");
+        //printf("Errore: Modalità di funzionamento acc non valida\r\n");
         return;
     }
 
@@ -537,7 +537,7 @@ void bno055_configureGyroscope(uint8_t gRange, uint8_t bandwidth, uint8_t operat
     } else if (gRange == 125) {
     	gyrConfigReg_0 |= 4 ;  // [GYRO_Config_0]: xxxxx100b
     } else {
-        printf("Errore: G Range gyr non valido\r\n");
+        //printf("Errore: G Range gyr non valido\r\n");
         return;
     }
 
@@ -558,7 +558,7 @@ void bno055_configureGyroscope(uint8_t gRange, uint8_t bandwidth, uint8_t operat
     } else if (bandwidth == 32) {
     	gyrConfigReg_0 |= (7 << 3);  // [GYRO_Config_0]: xx111xxxb
     } else {
-        printf("Errore: Bandwidth gyr non valido\r\n");
+        //printf("Errore: Bandwidth gyr non valido\r\n");
         return;
     }
 
@@ -573,7 +573,7 @@ void bno055_configureGyroscope(uint8_t gRange, uint8_t bandwidth, uint8_t operat
     } else if (operationMode == ADVANCED_POWERSAVE) {
     	gyrConfigReg_1 |= 4;  // [GYRO_Config_1]: xxxxx100b
     } else {
-        printf("Errore: Modalità di funzionamento gyr non valida\r\n");
+        //printf("Errore: Modalità di funzionamento gyr non valida\r\n");
         return;
     }
 
@@ -604,7 +604,7 @@ void bno055_configureMagnetometer(uint8_t dataOutputRate, uint8_t operationMode,
 	} else if (dataOutputRate == 30) {
 		magConfigReg |= 7 ;  // [MAG_Config]: xxxxx111b
     } else {
-        printf("Errore: Data Output Rate non valido\r\n");
+        //printf("Errore: Data Output Rate non valido\r\n");
         return;
     }
 
@@ -617,7 +617,7 @@ void bno055_configureMagnetometer(uint8_t dataOutputRate, uint8_t operationMode,
     } else if (operationMode == HIGH_ACCURACY) {
     	magConfigReg |= (3 << 3);  // [MAG_Config]: xxx11xxxb
     } else {
-        printf("Errore: Operation Mode non valida\r\n");
+        //printf("Errore: Operation Mode non valida\r\n");
         return;
     }
 
@@ -630,7 +630,7 @@ void bno055_configureMagnetometer(uint8_t dataOutputRate, uint8_t operationMode,
     } else if (powerMode == FORCE_MODE) {
     	magConfigReg |= (3 << 5);  // [MAG_Config]: x11xxxxxb
     } else {
-        printf("Errore: Power Mode non valida\r\n");
+        //printf("Errore: Power Mode non valida\r\n");
         return;
     }
 
@@ -675,7 +675,7 @@ void bno055_configureUnits(uint8_t accelUnit, uint8_t gyroUnit, uint8_t eulerUni
     } else if (accelUnit == 1) {  // mg
         unitConfig |= 1; // xxxxxxx1b
     } else {
-        printf("Errore: Acceleration Unit non valida\r\n");
+        //printf("Errore: Acceleration Unit non valida\r\n");
         return;
     }
 
@@ -685,7 +685,7 @@ void bno055_configureUnits(uint8_t accelUnit, uint8_t gyroUnit, uint8_t eulerUni
     } else if (gyroUnit == 1) {  // Rps
         unitConfig |= (1 << 1); // xxxxxx1xb
     } else {
-        printf("Errore: Gyro Unit non valida\r\n");
+        //printf("Errore: Gyro Unit non valida\r\n");
         return;
     }
 
@@ -695,7 +695,7 @@ void bno055_configureUnits(uint8_t accelUnit, uint8_t gyroUnit, uint8_t eulerUni
     } else if (eulerUnit == 1) {  // Radianti
         unitConfig |= (1 << 2); // xxxxx1xxb
     } else {
-        printf("Errore: Euler Unit non valida\r\n");
+        //printf("Errore: Euler Unit non valida\r\n");
         return;
     }
 
@@ -705,7 +705,7 @@ void bno055_configureUnits(uint8_t accelUnit, uint8_t gyroUnit, uint8_t eulerUni
     } else if (tempUnit == 1) {  // gradi farenheit
         unitConfig |= (1 << 4); // xxx1xxxxb
     } else {
-        printf("Errore: Temperature Unit non valida\r\n");
+        //printf("Errore: Temperature Unit non valida\r\n");
         return;
     }
 
@@ -715,7 +715,7 @@ void bno055_configureUnits(uint8_t accelUnit, uint8_t gyroUnit, uint8_t eulerUni
 	} else if (orientMode == 1) {  // Android
 		unitConfig |= (1 << 7); // 1xxxxxxxb
 	} else {
-		printf("Errore: Orientation Mode non valida\r\n");
+		//printf("Errore: Orientation Mode non valida\r\n");
 		return;
 	}
 
@@ -998,7 +998,7 @@ void bno055_get_int_en(){
 	bno055_setPage(1);
 	bno055_readData(BNO055_INT_EN, dato, len);
 	bno055_setPage(0);
-	printf("Il valore del registro BNO055_INT_EN è: %d\r\n", dato[0]); //valore in esadecimale
+	//printf("Il valore del registro BNO055_INT_EN è: %d\r\n", dato[0]); //valore in esadecimale
 }
 
 void bno055_get_int_msk(){
@@ -1008,7 +1008,7 @@ void bno055_get_int_msk(){
 	bno055_setPage(1);
 	bno055_readData(BNO055_INT_MSK, dato, len);
 	bno055_setPage(0);
-	printf("Il valore del registro BNO055_INT_MSK è: %d\r\n", dato[0]); //valore in esadecimale
+	//printf("Il valore del registro BNO055_INT_MSK è: %d\r\n", dato[0]); //valore in esadecimale
 }
 
 void bno055_get_acc_int_settings(){
@@ -1018,7 +1018,7 @@ void bno055_get_acc_int_settings(){
 	bno055_setPage(1);
 	bno055_readData(BNO055_ACC_INT_SETTINGS, dato, len);
 	bno055_setPage(0);
-	printf("Il valore del registro BNO055_ACC_INT_SETTINGS è: %d\r\n", dato[0]); //valore in esadecimale
+	//printf("Il valore del registro BNO055_ACC_INT_SETTINGS è: %d\r\n", dato[0]); //valore in esadecimale
 }
 
 void bno055_get_gyr_int_settings(){
@@ -1028,5 +1028,5 @@ void bno055_get_gyr_int_settings(){
 	bno055_setPage(1);
 	bno055_readData(BNO055_GYR_INT_SETTINGS, dato, len);
 	bno055_setPage(0);
-	printf("Il valore del registro BNO055_GYR_INT_SETTINGS è: %d\r\n", dato[0]); //valore in esadecimale
+	//printf("Il valore del registro BNO055_GYR_INT_SETTINGS è: %d\r\n", dato[0]); //valore in esadecimale
 }

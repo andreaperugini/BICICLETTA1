@@ -19,7 +19,7 @@
 ../Core/Src/bno055.c:110:6:bno055_disableExternalCrystal	1
 ../Core/Src/bno055.c:113:6:bno055_reset	1
 ../Core/Src/bno055.c:119:8:bno055_getTemp	1
-../Core/Src/bno055.c:127:6:bno055_setup	2
+../Core/Src/bno055.c:127:6:bno055_setup	1
 ../Core/Src/bno055.c:145:9:bno055_getSWRevision	1
 ../Core/Src/bno055.c:153:9:bno055_getBootloaderRevision	1
 ../Core/Src/bno055.c:161:9:bno055_getSystemStatus	1
@@ -40,8 +40,8 @@
 ../Core/Src/bno055.c:339:6:bno055_setAxisMap	1
 ../Core/Src/bno055.c:346:6:bno055_assignI2C	1
 ../Core/Src/bno055.c:350:6:bno055_delay	1
-../Core/Src/bno055.c:358:6:bno055_writeData	21
-../Core/Src/bno055.c:429:6:bno055_readData	5
+../Core/Src/bno055.c:358:6:bno055_writeData	3
+../Core/Src/bno055.c:429:6:bno055_readData	1
 ../Core/Src/bno055.c:452:7:calculateHeading	2
 ../Core/Src/bno055.c:464:6:bno055_configureAccelerometer	19
 ../Core/Src/bno055.c:524:6:bno055_configureGyroscope	15
