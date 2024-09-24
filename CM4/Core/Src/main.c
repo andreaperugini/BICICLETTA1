@@ -100,7 +100,7 @@ int flag_BNO055_Data_Ready = 0;
 float flag_Tc = 0; //flag che viene settata ad 1 ogni 0.01 secondi dalla funzione di callback del timer2
 
 //VARIABILI PER PID RUOTA POSTERIORE
-float speed = 18; //velocita di regime della ruota dietro
+float speed = 0; //velocita di regime della ruota dietro [m/s] credo
 float counts = 0; //counts per encoder
 float counts_steer = 0; //counts per encoder sterzo
 float delta_angle_degree_steer = 0; //delta angolo sterzo
@@ -110,6 +110,7 @@ float angle_degree=0;
 float speed_degsec = 0;
 float speed_rpm = 0;
 float desired_speed_metsec = 0;
+float speed_metsec = 0;
 float desired_speed_rpm = 0;
 float u_back_wheel = 0;
 float duty_back_wheel = 0;
@@ -117,7 +118,11 @@ int direction_back_wheel = 0;
 int bno055_calibrated = 0; //0 falso, 1 true
 float speed_degsec_steer = 0;
 int sys_started = 0;
+float acc_steer = 0;
 
+float velocitavecchia[30];
+float velocitanuova[30];
+float speed_degsec_filtrata =0;
 float corrente_non_filtrata = 0;
 float desired_yaw_rate = 0;
 float desired_roll = 0;
@@ -145,7 +150,8 @@ int n_ref = 0;
 
 //V partitore = a*I + b
 const float a=0.7937;
-const float b=2.4699;
+//const float b=2.4699;
+const float b=2.4699 - 0.025 + 0.01 + 0.002;
 const float lambda = -767528;
 float VoltSens = 0;
 
@@ -253,11 +259,12 @@ double calcolaMediaMobile(double nuovoValore) {
 
 
 
-float voltToAmpere(float Volt)
+float voltToAmpere(float Volt, float a, float b)
 {
 	//float ampere = (Volt-2.47)/0.22;  //a3b RESISTENZA
 	//float ampere = Volt*1.25994074 - 3.1119; //a3b MOTORE
-	float ampere = (Volt -2.53)/0.8 + 0.095;
+	//float ampere = (Volt -2.53)/0.8 + 0.095 + 0.065 + 0.07 ;
+	float ampere = (Volt-a)/b;
 
 	//float ampere = 2.3*Volt - 5.75;   //a4b DA RIVEDERE
 	//float ampere = (Volt-2.48)/0.185; //sensore ACS712 05b
@@ -285,6 +292,30 @@ float getSpeed(float actual_speed) {
 		return speed;
 }
 //******************
+
+
+
+float filtro_media_mobile(float* vettorenuovo, float* vettorevecchio, float nuovamisurazione, int dimensione)
+{
+	vettorenuovo[0] = nuovamisurazione;
+		  for(int i=0; i<dimensione-1; i++)
+		  {
+
+			  vettorenuovo[i+1] = vettorevecchio[i];   // dal 2 al n-1 esimo valore si ricopiano i valori vecchi
+		  }
+
+		  float somma = 0;
+		  float media;
+		  for(int i=0; i<dimensione; i++)
+		  {
+			  vettorevecchio[i]=vettorenuovo[i];  //copia il vettore nuovo nel vecchio
+			  somma += vettorenuovo[i];           //calcola la somma di tutti i valori
+			 // printf("%f.3 vet ", vettorenuovo[i]);
+		  }
+
+		  media = somma/dimensione;
+		  return media;
+}
 
 /* USER CODE END 0 */
 
@@ -346,7 +377,6 @@ int main(void)
 	HAL_TIM_Base_Start(&htim4);
 	HAL_TIM_Base_Start(&htim8);
 
-	HAL_GPIO_EXTI_Callback(GPIO_PIN_13);//forse da aggiungere anche quello per il bno
 
 
 	srand(1233);
@@ -373,13 +403,13 @@ int main(void)
 	//*************************
 	//PID motore ruota dietro
 	init_PID(&pid_speed, dt, V_MAX, -V_MAX);
-	tune_PID(&pid_speed, 0.001, 0.05, 0);
+	tune_PID(&pid_speed, 7, 6, 0);
 	//*************************
 
 	//*************************
 	//PID angolo roll
-	init_PID(&pid_roll, dt, 3*K, -3*K);
-	tune_PID(&pid_roll, 40, 9, 0.5);
+	init_PID(&pid_roll, dt, 0.0025/5, -0.0025/5);
+	tune_PID(&pid_roll, 20, 9, 0.5);
 	//*************************
 
 	//*************************
@@ -448,27 +478,42 @@ int main(void)
 					TIM4->CNT = (TIM4->ARR) / 2;
 
 
-					delta_angle_degree = (counts * 360) / (13 * 4 * 66);
+					delta_angle_degree = (counts * 360) / (13 * 4 * 66); //del motore(davanti) //18denti dietro 3.8cm  //28 davanti 5.7cm
+
 					angle_degree += delta_angle_degree;
-					speed_degsec = delta_angle_degree / dt;
-					speed_rpm = -(DegreeSec2RPM(speed_degsec) / 28 * 18); //wtf perche il meno???
+					speed_degsec = -1*delta_angle_degree / dt; //velocita angolare
+
+
+					speed_degsec_filtrata  = filtro_media_mobile(velocitavecchia, velocitanuova, speed_degsec, 30);
+
+					speed_degsec_filtrata = speed_degsec_filtrata*0.057/0.038; //rapporto velcoita angolare tra ruota dietro e avanti???
+
+					speed_metsec = speed_degsec_filtrata/180*3.14/radius;
+					//speed_rpm = -(DegreeSec2RPM(speed_degsec) / 28 * 18); //wtf perche il meno???
 					//*******************************
 
 					//******************************+
 					//PID ruota dietro
 					desired_speed_metsec = getSpeed(desired_speed_metsec); //funzione che crea un riferimento a rampa e poi costante per la velocita della ruota dietro
-					desired_speed_rpm = DegreeSec2RPM(
-							desired_speed_metsec / radius);
+					desired_speed_rpm = DegreeSec2RPM(desired_speed_metsec / radius);
+					u_back_wheel = PID_controller(&pid_speed, speed_metsec, desired_speed_metsec);
 
-					u_back_wheel = PID_controller(&pid_speed, speed_rpm,
-							desired_speed_rpm);
-					duty_back_wheel = Voltage2Duty(u_back_wheel);
-					direction_back_wheel = Ref2Direction(desired_speed_rpm); //in teoria non serve perche la direzione è sempre in avanti
-					set_PWM_and_dir_back_wheel(duty_back_wheel,
-							(uint8_t) direction_back_wheel); //non ho capito bene cosa fa.
+
+
 					//tocca aggiungere il rallentamento nel caso in cui inizi a cadere troppo velocemente
 					//******************************
-
+					if(roll>=11 || roll<=-11)
+						{sys_started=0; //nel caso in cui inizia a cadere bisogna ripremere il tasto blu per fare ripartire tutto il meccanismo di controllo
+						}
+					if(sys_started==0)
+					{
+						desired_speed_metsec=0;
+						u_back_wheel=0;
+					}
+					u_back_wheel = 0;
+					duty_back_wheel = Voltage2Duty(u_back_wheel);
+					direction_back_wheel = Ref2Direction(u_back_wheel);
+					set_PWM_and_dir_back_wheel(duty_back_wheel, (uint8_t) direction_back_wheel);
 					//test
 //					printf("desired_speed_metsec %f.3, speed_rpm %f.3 \r\n", desired_speed_metsec,speed_rpm);
 
@@ -488,12 +533,11 @@ int main(void)
 					//#####################################
 					//******************************
 
-
 					//prima di usare l'encoder
 
-					desired_roll = 0.88;
-					//desired_torque = PID_controller(&pid_roll, roll,
-							//desired_roll);
+
+					desired_roll = -2.5;
+					desired_torque = PID_controller(&pid_roll, roll,desired_roll);
 
 
 					//******************************
@@ -508,7 +552,9 @@ int main(void)
 					//calcolo l'angolo dello sterzo
 					delta_angle_degree_steer = (counts_steer * 360) / (13 * 4 * 66);
 					angle_steer = angle_steer + delta_angle_degree_steer;  //angolo sterzo
-					speed_degsec_steer = delta_angle_degree / dt;  //velocita sterzo
+					speed_degsec_steer = delta_angle_degree_steer / dt;  //velocita sterzo
+					acc_steer = speed_degsec_steer/dt; //accelerazione sterzo
+
 
 					//fase 1 printf("%.3f \r\n", angle_steer);
 
@@ -612,7 +658,7 @@ int main(void)
 					volt = ((float) CountValue) * Vref / (resolution);
 					HAL_ADC_Stop(&hadc1);
 					VoltSens = volt * 1.524 - 0.1018;
-					corrente_non_filtrata = voltToAmpere(VoltSens);
+					corrente_non_filtrata = voltToAmpere(VoltSens,a,b);
 
 					 fir_in_arm = (float32_t)corrente_non_filtrata;
 					 arm_fir_f32(&fir_instance, &fir_in_arm, &fir_out_arm, 1);
@@ -665,14 +711,14 @@ int main(void)
 					{torque=0;
 					desired_torque=0;
 					stadio = 1000;
+					u_front_wheel = 0;
 					}
 
-					u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_torque);
+					u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
+					//u_front_wheel = 0;
 					//u_front_wheel = 5.0*18/12/2*(sin(2*3.14/3* dt*n_ref) + 1);
 				//	u_front_wheel = 0;
-
-
-
+/*
 										  switch(stadio)
 												  {
 												  case 0:
@@ -688,7 +734,7 @@ int main(void)
 													  break;
 												  case 1:
 													  //step con 10V;
-													  if(desired_torque >= 0.0025/3) {stadio++;n_ref = 0;}
+													  if(desired_torque >= 0.0025) {stadio++;n_ref = 0;}
 													  else desired_torque+=0.0066/60*dt;
 													  break;
 
@@ -706,7 +752,7 @@ int main(void)
 													  else desired_torque+=-0.0066/60*dt;
 													  break;
 												  case 5:
-													  if(desired_torque <= -0.0025/3)
+													  if(desired_torque <= -0.0025)
 													  {stadio++;
 													  n_ref = 0;}
 													  else desired_torque+=-0.0066/60*dt;
@@ -719,18 +765,26 @@ int main(void)
 												  break;
 
 												case 8:
-													  stadio  =0;
+													  stadio =0;
+													  n_ref=0;
 													  break;
 												case 1000:
+
+
 												  default:
 													  break;
 												  }
 
 
 
-
+*/
 					//u_front_wheel = 18;
-					//u_front_wheel = 0;
+
+
+
+
+
+
 					duty_front_wheel = Voltage2Duty(u_front_wheel);
 					dir_front_wheel = Ref2Direction(u_front_wheel);
 
@@ -740,22 +794,24 @@ int main(void)
 					set_PWM_and_dir_front_wheel(duty_front_wheel, dir_front_wheel);
 
 //per coppia pid
-
-					printf("%.5f ",corrente_non_filtrata);
+/*
+					printf("%.5f ",speed_degsec_steer);
 					printf("%.5f ",desired_torque);
 					printf("%.5f ",torque);
-					printf("%.5f ",u_front_wheel/18.0*12);
+					printf("%.5f ",acc_steer);
+*/
+					//printf("%.5f ",u_front_wheel/18.0*12);
 
 
 
 //per dietro
-					/*
-					printf("%.5f ",angle_degree);
-					printf("%.5f ",desired_torque);
-				    printf("%.5f ",torque);
-					printf("%.5f ",u_front_wheel/18.0*12);
 
-*/
+					printf("%.5f ",angle_degree);
+					printf("%.5f ",desired_speed_metsec);
+				    printf("%.5f ",speed_metsec);
+					printf("%.5f ",u_back_wheel/18.0*12);
+
+
 					printf("\r\n");
 
 					//inizio ingressi casuali a gradino
@@ -1241,7 +1297,7 @@ static void MX_TIM8_Init(void)
   htim8.Instance = TIM8;
   htim8.Init.Prescaler = 0;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 65535;
+  htim8.Init.Period = 3423-1;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1397,6 +1453,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		{
 			sys_started++;
 
+			if(sys_started==1) {stadio=0;  n_ref=0;}
 			if(sys_started==2) sys_started=0;
 
 		}
@@ -1417,6 +1474,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	}
 }
 //*******************
+
 
 
 //******************
