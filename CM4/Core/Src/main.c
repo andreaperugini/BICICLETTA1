@@ -120,6 +120,13 @@ float speed_degsec_steer = 0;
 int sys_started = 0;
 float acc_steer = 0;
 
+
+float speed_degsec_steer_filtrata = 0;
+float speedsteernuovo[30];
+float speedsteervecchio[30];
+float angolo_sterzo = 0;
+
+
 float velocitavecchia[30];
 float velocitanuova[30];
 float speed_degsec_filtrata =0;
@@ -408,8 +415,8 @@ int main(void)
 
 	//*************************
 	//PID angolo roll
-	init_PID(&pid_roll, dt, 0.0025/5, -0.0025/5);
-	tune_PID(&pid_roll, 20, 9, 0.5);
+	init_PID(&pid_roll, dt, 3*K, -3*K);
+	tune_PID(&pid_roll, 0.00015, 0, 0);
 	//*************************
 
 	//*************************
@@ -468,7 +475,7 @@ int main(void)
 					//stampa angoli eulero
 
 					//printf("Yaw: %+2.2f Roll: %+2.2f Pitch: %+2.2f \r\n", eul.x, eul.y, eul.z);
-					roll = eul.y;
+					roll = -eul.y;
 					//#####################################
 					//##          RUOTA DIETRO		   ##
 					//#####################################
@@ -502,9 +509,11 @@ int main(void)
 
 					//tocca aggiungere il rallentamento nel caso in cui inizi a cadere troppo velocemente
 					//******************************
-					if(roll>=11 || roll<=-11)
+					/*
+					if(roll>=30 || roll<=-30) //metti 11 dopo?
 						{sys_started=0; //nel caso in cui inizia a cadere bisogna ripremere il tasto blu per fare ripartire tutto il meccanismo di controllo
 						}
+						*/
 					if(sys_started==0)
 					{
 						desired_speed_metsec=0;
@@ -536,7 +545,7 @@ int main(void)
 					//prima di usare l'encoder
 
 
-					desired_roll = -2.5;
+					desired_roll = 2;
 					desired_torque = PID_controller(&pid_roll, roll,desired_roll);
 
 
@@ -554,6 +563,9 @@ int main(void)
 					angle_steer = angle_steer + delta_angle_degree_steer;  //angolo sterzo
 					speed_degsec_steer = delta_angle_degree_steer / dt;  //velocita sterzo
 					acc_steer = speed_degsec_steer/dt; //accelerazione sterzo
+
+					speed_degsec_steer_filtrata = filtro_media_mobile(speedsteernuovo, speedsteervecchio, speed_degsec_steer, 30);
+					angolo_sterzo += speed_degsec_steer_filtrata*dt;
 
 
 					//fase 1 printf("%.3f \r\n", angle_steer);
@@ -640,8 +652,13 @@ int main(void)
 					//#####################################
 					//******************************
 					//filtro passa basso 1/s+1 discretizzato con Matlab
-					desired_filtered_torque = 0.99 * old_desired_filtered_torque
-							+ 0.00995 * old_desired_torque;
+					//desired_filtered_torque = 0.99 * old_desired_filtered_torque
+					//		+ 0.00995 * old_desired_torque; //questo è quello del prof
+
+					desired_filtered_torque = 0.9 * old_desired_filtered_torque
+											+ 0.1 * old_desired_torque;
+
+
 					old_desired_torque = desired_torque;
 					old_desired_filtered_torque = desired_filtered_torque;
 				//	printf("%.3f ", desired_filtered_torque);
@@ -707,14 +724,7 @@ int main(void)
 
 
 
-					if(sys_started==0)
-					{torque=0;
-					desired_torque=0;
-					stadio = 1000;
-					u_front_wheel = 0;
-					}
 
-					u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
 					//u_front_wheel = 0;
 					//u_front_wheel = 5.0*18/12/2*(sin(2*3.14/3* dt*n_ref) + 1);
 				//	u_front_wheel = 0;
@@ -734,7 +744,7 @@ int main(void)
 													  break;
 												  case 1:
 													  //step con 10V;
-													  if(desired_torque >= 0.0025) {stadio++;n_ref = 0;}
+													  if(desired_torque >= 0.0025*2) {stadio++;n_ref = 0;}
 													  else desired_torque+=0.0066/60*dt;
 													  break;
 
@@ -752,7 +762,7 @@ int main(void)
 													  else desired_torque+=-0.0066/60*dt;
 													  break;
 												  case 5:
-													  if(desired_torque <= -0.0025)
+													  if(desired_torque <= -0.0025*2)
 													  {stadio++;
 													  n_ref = 0;}
 													  else desired_torque+=-0.0066/60*dt;
@@ -776,15 +786,21 @@ int main(void)
 												  }
 
 
-
 */
+
 					//u_front_wheel = 18;
 
+										  u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
+
+										  					if(sys_started==0)
+										  					{
+										  					stadio = 1000;
+										  					u_front_wheel = 0;
+										  					}
 
 
 
-
-
+					//u_front_wheel = 0;
 					duty_front_wheel = Voltage2Duty(u_front_wheel);
 					dir_front_wheel = Ref2Direction(u_front_wheel);
 
@@ -802,16 +818,21 @@ int main(void)
 */
 					//printf("%.5f ",u_front_wheel/18.0*12);
 
+//per roll
+					printf("%.5f ",roll);
+					printf("%.5f ",desired_filtered_torque);
+					printf("%.5f ",torque);
+					printf("%.5f ",u_front_wheel);
 
 
 //per dietro
-
+/*
 					printf("%.5f ",angle_degree);
 					printf("%.5f ",desired_speed_metsec);
 				    printf("%.5f ",speed_metsec);
 					printf("%.5f ",u_back_wheel/18.0*12);
 
-
+*/
 					printf("\r\n");
 
 					//inizio ingressi casuali a gradino
