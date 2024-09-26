@@ -100,7 +100,7 @@ int flag_BNO055_Data_Ready = 0;
 float flag_Tc = 0; //flag che viene settata ad 1 ogni 0.01 secondi dalla funzione di callback del timer2
 
 //VARIABILI PER PID RUOTA POSTERIORE
-float speed = 0; //velocita di regime della ruota dietro [m/s] credo
+float speed = 10; //velocita di regime della ruota dietro [m/s] credo
 float counts = 0; //counts per encoder
 float counts_steer = 0; //counts per encoder sterzo
 float delta_angle_degree_steer = 0; //delta angolo sterzo
@@ -120,6 +120,11 @@ float speed_degsec_steer = 0;
 int sys_started = 0;
 float acc_steer = 0;
 
+
+float tempo_attuale=0;
+float tempo_iniziale=0;
+int tasto_premuto=0;
+int tasto_appena_premuto=0;
 
 float speed_degsec_steer_filtrata = 0;
 float speedsteernuovo[30];
@@ -156,9 +161,20 @@ int n_ref = 0;
 //filtro corrente
 
 //V partitore = a*I + b
+
+//se scheda alimentata da pc
+/*
 const float a=0.7937;
 //const float b=2.4699;
-const float b=2.4699 - 0.025 + 0.01 + 0.002;
+//const float b=2.4699 - 0.025 + 0.01 + 0.002;
+const float b=2.4569;
+*/
+
+//se scheda alimentata da batteria;
+const float a=0.7937;
+const float b= 2.4550-0.08-0.08-0.03;
+
+
 const float lambda = -767528;
 float VoltSens = 0;
 
@@ -448,6 +464,29 @@ int main(void)
 
 		if (flag_Tc == 1) {
 			flag_Tc = 0;
+
+			if((tasto_premuto==1) && (tasto_appena_premuto==1))
+			{
+				tempo_iniziale = n_ref*dt;
+				tasto_appena_premuto = 2;
+			}
+
+			if((tasto_premuto==1) && (tasto_appena_premuto==2))
+			{
+				tempo_attuale = n_ref*dt;
+				if(tempo_attuale - tempo_iniziale >= 3)
+				{
+					sys_started++;
+
+								if(sys_started==1) {sys_started++; stadio=0;  n_ref=0;}
+								if(sys_started==2) {stadio=0;  n_ref=0;}
+								if(sys_started==3)
+									sys_started=0;
+					tasto_premuto=0;
+
+				}
+			}
+
 			//#####################################
 			//##             BNO055			   ##
 			//#####################################
@@ -475,7 +514,12 @@ int main(void)
 					//stampa angoli eulero
 
 					//printf("Yaw: %+2.2f Roll: %+2.2f Pitch: %+2.2f \r\n", eul.x, eul.y, eul.z);
-					roll = -eul.y;
+					roll = -eul.y; //ottengo angolo di eulero
+
+					//controllo angolo di roll, se è troppo grande ferma tutto
+					if(roll>=30 || roll<=-30)
+						{sys_started=0;}
+
 					//#####################################
 					//##          RUOTA DIETRO		   ##
 					//#####################################
@@ -483,49 +527,44 @@ int main(void)
 					//Ottengo velocita ruota dietro
 					counts = (double) TIM4->CNT - (TIM4->ARR) / 2;
 					TIM4->CNT = (TIM4->ARR) / 2;
+					//velocita angolare
+					//encoder ha risoluzione cpr 500, non 66
+					delta_angle_degree = (counts * 360) / (2 * 4 * 500)*0.03099707249870; //del motore(davanti) //18denti dietro 3.8cm  //28 davanti 5.7cm
+					speed_degsec = -1*delta_angle_degree / dt;
 
 
-					delta_angle_degree = (counts * 360) / (13 * 4 * 66); //del motore(davanti) //18denti dietro 3.8cm  //28 davanti 5.7cm
+
+
 
 					angle_degree += delta_angle_degree;
-					speed_degsec = -1*delta_angle_degree / dt; //velocita angolare
-
-
+					//filtro media mobile
 					speed_degsec_filtrata  = filtro_media_mobile(velocitavecchia, velocitanuova, speed_degsec, 30);
-
+					//rapporto ruota posteriore
 					speed_degsec_filtrata = speed_degsec_filtrata*0.057/0.038; //rapporto velcoita angolare tra ruota dietro e avanti???
 
+					//velocita ruota dietro
 					speed_metsec = speed_degsec_filtrata/180*3.14/radius;
-					//speed_rpm = -(DegreeSec2RPM(speed_degsec) / 28 * 18); //wtf perche il meno???
 					//*******************************
 
 					//******************************+
 					//PID ruota dietro
 					desired_speed_metsec = getSpeed(desired_speed_metsec); //funzione che crea un riferimento a rampa e poi costante per la velocita della ruota dietro
-					desired_speed_rpm = DegreeSec2RPM(desired_speed_metsec / radius);
+					desired_speed_rpm = DegreeSec2RPM(desired_speed_metsec / radius); //inutile per ora
 					u_back_wheel = PID_controller(&pid_speed, speed_metsec, desired_speed_metsec);
-
-
-
-					//tocca aggiungere il rallentamento nel caso in cui inizi a cadere troppo velocemente
 					//******************************
-					/*
-					if(roll>=30 || roll<=-30) //metti 11 dopo?
-						{sys_started=0; //nel caso in cui inizia a cadere bisogna ripremere il tasto blu per fare ripartire tutto il meccanismo di controllo
-						}
-						*/
+
+
 					if(sys_started==0)
 					{
 						desired_speed_metsec=0;
 						u_back_wheel=0;
 					}
-					u_back_wheel = 0;
+
+					//u_back_wheel = 0; //per tenerla ferma per i test
+					//settare duty e pwm driver
 					duty_back_wheel = Voltage2Duty(u_back_wheel);
 					direction_back_wheel = Ref2Direction(u_back_wheel);
 					set_PWM_and_dir_back_wheel(duty_back_wheel, (uint8_t) direction_back_wheel);
-					//test
-//					printf("desired_speed_metsec %f.3, speed_rpm %f.3 \r\n", desired_speed_metsec,speed_rpm);
-
 					//fine test
 
 					//#####################################
@@ -538,111 +577,28 @@ int main(void)
 					//******************************
 
 					//#####################################
-					//##            PID ROLL			   ##
+					//##            PID ROLL			 ##
 					//#####################################
-					//******************************
 
+					//******************************
 					//prima di usare l'encoder
 
-
-					desired_roll = 2;
+					desired_roll = 2; //l'angolo di equilibrio sono 2 gradi
 					desired_torque = PID_controller(&pid_roll, roll,desired_roll);
-
-
 					//******************************
 
 
-					//ora con encoder
+					//encoder per ruota anteriore
 					//ottengo i counts dell'encoder
 					counts_steer = (double) TIM8->CNT - (TIM8->ARR) / 2; //credo cosi hai sia i conteggi negativi che positivi
 					TIM8->CNT = (TIM8->ARR) / 2;
-
-
 					//calcolo l'angolo dello sterzo
-					delta_angle_degree_steer = (counts_steer * 360) / (13 * 4 * 66);
+					delta_angle_degree_steer = (counts_steer * 360) / (2 * 4 * 500)*0.03099707249870;
 					angle_steer = angle_steer + delta_angle_degree_steer;  //angolo sterzo
 					speed_degsec_steer = delta_angle_degree_steer / dt;  //velocita sterzo
-					acc_steer = speed_degsec_steer/dt; //accelerazione sterzo
 
 					speed_degsec_steer_filtrata = filtro_media_mobile(speedsteernuovo, speedsteervecchio, speed_degsec_steer, 30);
 					angolo_sterzo += speed_degsec_steer_filtrata*dt;
-
-
-					//fase 1 printf("%.3f \r\n", angle_steer);
-
-					//fase 2
-					//per trovare il processo tra tensione in ingresso e velocita angolare
-					//ingressi a gradino
-
-					/*
-					  switch(stadio)
-							  {
-
-							  case 0:
-								  //niente
-								  duty=0;  //cioe tensione
-
-								  if(dt*n_ref >= 8) //dopo 8 secondi
-										  {
-											  stadio++;
-											  n_ref = 0;
-										  }
-
-								  break;
-							  case 1:
-								  //step con 10V;
-								  u_front_wheel = 10;
-								  break;
-
-							  case 2:
-								  u_front_wheel = 5;
-								  break;
-							  case 3:
-								  u_front_wheel = 3;
-								  break;
-							  case 4:
-								  u_front_wheel = 0;
-								  break;
-							case 5:
-								  u_front_wheel = 18;
-								  break;
-							  case 6:
-								  u_front_wheel = 0;
-								  break;
-							  case 7:
-								  //ingresso sinusoidale con periodo = 1 sec
-								  u_front_wheel = 8*sin(2*3.14*(n_ref*dt));
-							  case 8:
-								  u_front_wheel = 0;
-							  default:
-								  break;
-							  }
-
-					  if(dt*n_ref >= 8) //dopo 8 secondi
-					  {
-						  stadio++;
-						  n_ref = 0;
-					  }
-
-
-
-					  duty_front_wheel = Voltage2Duty(u_front_wheel);
-					  dir_front_wheel = Ref2Direction(u_front_wheel);
-					  set_PWM_and_dir_front_wheel(duty_front_wheel, dir_front_wheel);
-
-					  printf("%.3f ", u_front_wheel);
-					  printf("%.3f \r\n", delta_angle_steer);
-
-					*/
-
-
-
-
-
-
-
-
-
 
 
 					//******************************
@@ -655,13 +611,11 @@ int main(void)
 					//desired_filtered_torque = 0.99 * old_desired_filtered_torque
 					//		+ 0.00995 * old_desired_torque; //questo è quello del prof
 
+					//altro filtro, funziona meglio
 					desired_filtered_torque = 0.9 * old_desired_filtered_torque
 											+ 0.1 * old_desired_torque;
-
-
 					old_desired_torque = desired_torque;
 					old_desired_filtered_torque = desired_filtered_torque;
-				//	printf("%.3f ", desired_filtered_torque);
 					//******************************
 
 					//#####################################
@@ -677,11 +631,13 @@ int main(void)
 					VoltSens = volt * 1.524 - 0.1018;
 					corrente_non_filtrata = voltToAmpere(VoltSens,a,b);
 
+
+					//filtro non funzionante del gruppo precedente
+					/*
 					 fir_in_arm = (float32_t)corrente_non_filtrata;
 					 arm_fir_f32(&fir_instance, &fir_in_arm, &fir_out_arm, 1);
 					 filtered_current = fir_out_arm;
-
-							 // printf("%.3f ", corrente_non_filtrata);
+					*/
 
 
 
@@ -689,14 +645,9 @@ int main(void)
 					//setta i valori di input e di misura per il filtro di kalman
 					z_data[0] = VoltSens; //misura del voltaggio del sensore di corrente
 					z_data[1] = corrente_non_filtrata; //per non usare la misura I aggiuntiva, volendo si puo usare la formula V=IR del motore, adesso vedo come metterla
-					//z_data[1] = misuracorrente; //qua ci va la misura della corrente. scelta grazie al pwm dalla formula I = V/R
 					kalman_predict(&kf, &u);
 					kalman_update(&kf, &z);
 					filtered_current_kalman = x_data[1];
-					//filtered_current = calcolaMediaMobile(corrente_non_filtrata);
-
-					//idea di trovare il modello del processo dello sterzo(quindi modello sterzo+motore) tramite risposta indiciale, poi dare come misura la I ottenuta dalla equazione dinamica
-
 
 					//calcolo coppia
 					torque = filtered_current_kalman * K;
@@ -706,28 +657,8 @@ int main(void)
 					//test
 
 					//desired_torque = K * 0.15*sin((n_ref / 100.0) * 2 * 3.14/3);
-					//desired_torque =  K*0.15*sin((n_ref/2000.0)*2*3.14);
-					//desired_torque = 0.040;
 
-					//printf("%.3f %.3f %.3f %.3f %.3f \r\n" ,desired_torque,torque,u_front_wheel,dir_front_wheel,pid_steering_torque.Iterm);
-					//coppia a scalino
-					/*
-					if ((n_ref/1000)%2 == 0) desired_torque=K*5;
-					else desired_torque=-K*5;
-					*/
-					/*
-					printf("filtr_I %.3f ", filtered_current);
-					printf("u_front_wheel: %.3f ", u_front_wheel);
-					printf("duty_front_wheel: %.3f \r\n", duty_front_wheel);
-
-					*/
-
-
-
-
-					//u_front_wheel = 0;
-					//u_front_wheel = 5.0*18/12/2*(sin(2*3.14/3* dt*n_ref) + 1);
-				//	u_front_wheel = 0;
+				//per test con coppia trapezoidale
 /*
 										  switch(stadio)
 												  {
@@ -788,25 +719,33 @@ int main(void)
 
 */
 
-					//u_front_wheel = 18;
-
-										  u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
-
-										  					if(sys_started==0)
-										  					{
-										  					stadio = 1000;
-										  					u_front_wheel = 0;
-										  					}
 
 
+					u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
 
-					//u_front_wheel = 0;
+					//controllo angolo limite manubrio
+					if(angle_steer<= -90 )
+					{
+						if(u_front_wheel>=0) u_front_wheel = 0;
+					}
+					if(angle_steer>= 90)
+					{
+						if(u_front_wheel<=0) u_front_wheel = 0;
+
+					}
+
+
+
+
+					if(sys_started<=1)
+					{
+					//stadio = 1000; utile se hai l'algoritmo per il segnale trapezoidale
+
+					u_front_wheel = 0;
+					}
+
 					duty_front_wheel = Voltage2Duty(u_front_wheel);
 					dir_front_wheel = Ref2Direction(u_front_wheel);
-
-
-
-
 					set_PWM_and_dir_front_wheel(duty_front_wheel, dir_front_wheel);
 
 //per coppia pid
@@ -835,59 +774,9 @@ int main(void)
 */
 					printf("\r\n");
 
-					//inizio ingressi casuali a gradino
-
-
-					/*
-						if (stadio==0) periodi=5;
-
-					    while (stadio < 15 && stadio!=stadio_corrente && stadio!=0) {
-					        // Randomize the periodi between 2 and 7
-					        periodi = (int)random_float(5, 12);
-
-					        // Randomize the input f between -18 and 18
-					        f = (int)random_float(4, 18);
-
-					        //frequenza logaritmica
-					        freq = random_float(-0.3,1.3);
-
-					        //frequenza normale
-					        freq = pow(10,freq);
-
-					        ampiezza = f;
 
 
 
-					        stadio_corrente=stadio;
-					    }
-
-					    u_front_wheel = f*sin(freq*n_ref/100.0);
-
-					        if (n_ref/100 >= periodi) {
-					            stadio++;
-					            n_ref = 0;
-					        }
-
-					        if(stadio >=15 && stadio!=stadio_corrente) u_front_wheel=0;
-
-					*/
-					//fine ingressi casuali a gradino
-
-
-					//printf("%.3f %.3f %.3f \r\n" , desired_filtered_torque, torque, filtered_current);
-
-
-					//u_front_wheel = 5*sin((n_ref/100.0)*2*3.14*0.1);
-
-					//u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
-					//duty_front_wheel = Voltage2Duty(u_front_wheel);
-					//dir_front_wheel = Ref2Direction(u_front_wheel);
-
-
-
-					//set_PWM_and_dir_front_wheel(duty_front_wheel,
-					//		dir_front_wheel);
-					//printf("%.3f %.3f %d %.2f %.3f %d \r\n", u_front_wheel, torque, periodi, n_ref/100.0, freq, ampiezza);
 
 					//******************************
 
@@ -1272,7 +1161,7 @@ static void MX_TIM4_Init(void)
   htim4.Init.Period = 3423-1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
@@ -1318,19 +1207,19 @@ static void MX_TIM8_Init(void)
   htim8.Instance = TIM8;
   htim8.Init.Prescaler = 0;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 3423-1;
+  htim8.Init.Period = 4000-1;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC1Filter = 0;
+  sConfig.IC1Filter = 10;
   sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC2Filter = 0;
+  sConfig.IC2Filter = 10;
   if (HAL_TIM_Encoder_Init(&htim8, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -1472,10 +1361,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	//FUNZIONE DI CALLBACK PULSANTE BLU
 	if(GPIO_Pin == GPIO_PIN_13)
 		{
-			sys_started++;
 
-			if(sys_started==1) {stadio=0;  n_ref=0;}
-			if(sys_started==2) sys_started=0;
+			tasto_premuto = 1;
+			tasto_appena_premuto=1;
+
+
 
 		}
 }
