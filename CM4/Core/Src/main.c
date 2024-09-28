@@ -44,7 +44,7 @@
 #define HSEM_ID_0 (0U) /* HW semaphore 0*/
 #endif
 
-#define radius 18 //numero a caso
+#define radius 0.18 //numero a caso
 
 /* USER CODE END PD */
 
@@ -100,7 +100,7 @@ int flag_BNO055_Data_Ready = 0;
 float flag_Tc = 0; //flag che viene settata ad 1 ogni 0.01 secondi dalla funzione di callback del timer2
 
 //VARIABILI PER PID RUOTA POSTERIORE
-float speed = 10; //velocita di regime della ruota dietro [m/s] credo
+float speed = 5.7*3.6; //velocita di regime della ruota dietro [m/s] credo //A QUESTA CORRISPONDE 6.7 KM/H, NON SO XK
 float counts = 0; //counts per encoder
 float counts_steer = 0; //counts per encoder sterzo
 float delta_angle_degree_steer = 0; //delta angolo sterzo
@@ -119,6 +119,8 @@ int bno055_calibrated = 0; //0 falso, 1 true
 float speed_degsec_steer = 0;
 int sys_started = 0;
 float acc_steer = 0;
+float speed_degsec_back=0;
+float angle_back_wheel=0;
 
 
 float tempo_attuale=0;
@@ -172,8 +174,8 @@ const float b=2.4569;
 
 //se scheda alimentata da batteria;
 const float a=0.7937;
-const float b= 2.4550-0.08-0.08-0.03;
-
+//const float b= 2.4550-0.08-0.08-0.03;
+float b=2.4550-0.08-0.08+0.015*1.5;
 
 const float lambda = -767528;
 float VoltSens = 0;
@@ -355,7 +357,8 @@ int main(void)
 
 /* USER CODE BEGIN Boot_Mode_Sequence_1 */
 	/*HW semaphore Clock enable*/
-	__HAL_RCC_HSEM_CLK_ENABLE();
+	  __HAL_RCC_HSEM_CLK_ENABLE();
+
 	/* Activate HSEM notification for Cortex-M4*/
 	HAL_HSEM_ActivateNotification(__HAL_HSEM_SEMID_TO_MASK(HSEM_ID_0));
 	/*
@@ -432,7 +435,8 @@ int main(void)
 	//*************************
 	//PID angolo roll
 	init_PID(&pid_roll, dt, 3*K, -3*K);
-	tune_PID(&pid_roll, 0.00015, 0, 0);
+	tune_PID(&pid_roll, 0.00012,0,0.00012*3); //prova ad alzare
+
 	//*************************
 
 	//*************************
@@ -478,7 +482,7 @@ int main(void)
 				{
 					sys_started++;
 
-								if(sys_started==1) {sys_started++; stadio=0;  n_ref=0;}
+								if(sys_started==1) {stadio=0;  n_ref=0;}
 								if(sys_started==2) {stadio=0;  n_ref=0;}
 								if(sys_started==3)
 									sys_started=0;
@@ -540,10 +544,13 @@ int main(void)
 					//filtro media mobile
 					speed_degsec_filtrata  = filtro_media_mobile(velocitavecchia, velocitanuova, speed_degsec, 30);
 					//rapporto ruota posteriore
-					speed_degsec_filtrata = speed_degsec_filtrata*0.057/0.038; //rapporto velcoita angolare tra ruota dietro e avanti???
+					speed_degsec_back= speed_degsec_filtrata*0.057/0.038; //rapporto velcoita angolare tra ruota dietro e avanti???
 
 					//velocita ruota dietro
-					speed_metsec = speed_degsec_filtrata/180*3.14/radius;
+					speed_metsec = speed_degsec_back/180*3.14*radius;
+
+					//angolo dietro
+					angle_back_wheel += speed_degsec_back*dt;
 					//*******************************
 
 					//******************************+
@@ -556,10 +563,21 @@ int main(void)
 
 					if(sys_started==0)
 					{
-						desired_speed_metsec=0;
-						u_back_wheel=0;
-					}
+						u_front_wheel = 0;
+						u_back_wheel = 0;
 
+
+					}
+					if(sys_started ==1)
+					{
+						//ciclo per trovare la costante b della eq della corrente
+						//nuovo_valore_b
+						//per una corrente nulla, V=aI+b=b  quindi b è data dal voltaggio a riposo, che sta nella variabile x_data[0]
+												b=x_data[0];
+												//setto l'angolo del manubrio a 0
+												angle_steer = 0;
+												sys_started++;
+					}
 					//u_back_wheel = 0; //per tenerla ferma per i test
 					//settare duty e pwm driver
 					duty_back_wheel = Voltage2Duty(u_back_wheel);
@@ -568,7 +586,7 @@ int main(void)
 					//fine test
 
 					//#####################################
-					//##          PID YAW RATE		   ##
+					//##          PID YAW RATE		     ##
 					//#####################################
 					//******************************
 					desired_yaw_rate = 0;
@@ -608,14 +626,19 @@ int main(void)
 					//#####################################
 					//******************************
 					//filtro passa basso 1/s+1 discretizzato con Matlab
-					//desired_filtered_torque = 0.99 * old_desired_filtered_torque
-					//		+ 0.00995 * old_desired_torque; //questo è quello del prof
+
+					desired_filtered_torque = 0.99 * old_desired_filtered_torque
+							+ 0.00995 * old_desired_torque; //questo è quello del prof
+					old_desired_torque = desired_torque;
+					old_desired_filtered_torque = desired_filtered_torque;
 
 					//altro filtro, funziona meglio
+/*
 					desired_filtered_torque = 0.9 * old_desired_filtered_torque
 											+ 0.1 * old_desired_torque;
 					old_desired_torque = desired_torque;
 					old_desired_filtered_torque = desired_filtered_torque;
+*/
 					//******************************
 
 					//#####################################
@@ -724,13 +747,16 @@ int main(void)
 					u_front_wheel = PID_controller(&pid_steering_torque, torque, desired_filtered_torque);
 
 					//controllo angolo limite manubrio
+					//quando la u è negativa, l'angolo diminuisce
+
+
 					if(angle_steer<= -90 )
 					{
-						if(u_front_wheel>=0) u_front_wheel = 0;
+						if(u_front_wheel<0) u_front_wheel = 0;
 					}
-					if(angle_steer>= 90)
+					if(angle_steer>= 90) //se
 					{
-						if(u_front_wheel<=0) u_front_wheel = 0;
+						if(u_front_wheel>0) u_front_wheel = 0;
 
 					}
 
@@ -740,8 +766,10 @@ int main(void)
 					if(sys_started<=1)
 					{
 					//stadio = 1000; utile se hai l'algoritmo per il segnale trapezoidale
-
+					desired_speed_metsec=0;
+					u_back_wheel=0;
 					u_front_wheel = 0;
+
 					}
 
 					duty_front_wheel = Voltage2Duty(u_front_wheel);
@@ -749,23 +777,25 @@ int main(void)
 					set_PWM_and_dir_front_wheel(duty_front_wheel, dir_front_wheel);
 
 //per coppia pid
-/*
-					printf("%.5f ",speed_degsec_steer);
-					printf("%.5f ",desired_torque);
+
+					printf("%.5f ",angle_steer);
+					printf("%.5f ",desired_filtered_torque);
 					printf("%.5f ",torque);
-					printf("%.5f ",acc_steer);
-*/
-					//printf("%.5f ",u_front_wheel/18.0*12);
+					//printf("%.5f ",);
+
+					printf("%.5f ",u_front_wheel/18.0*12);
 
 //per roll
+					/*
 					printf("%.5f ",roll);
 					printf("%.5f ",desired_filtered_torque);
 					printf("%.5f ",torque);
 					printf("%.5f ",u_front_wheel);
 
-
+*/
 //per dietro
-/*
+					/*
+
 					printf("%.5f ",angle_degree);
 					printf("%.5f ",desired_speed_metsec);
 				    printf("%.5f ",speed_metsec);
