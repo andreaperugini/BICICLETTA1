@@ -30,6 +30,8 @@
 #include "arm_math.h"
 #include "kalman.h"
 #include "systemDimension.h"
+#include "BluetoothSerial.h"
+#include "stmlib.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 
 #ifndef HSEM_ID_0
 #define HSEM_ID_0 (0U) /* HW semaphore 0*/
@@ -83,8 +86,10 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim8;
 
+UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
@@ -122,7 +127,9 @@ float acc_steer = 0;
 float speed_degsec_back=0;
 float angle_back_wheel=0;
 
-
+float Kproll;
+float tauI;
+float tauD;
 float tempo_attuale=0;
 float tempo_iniziale=0;
 int tasto_premuto=0;
@@ -148,6 +155,8 @@ float CountValue = 0;
 float volt = 0;
 float yaw_rate = 0;
 float roll = 0;
+float yaw =0;
+float old_yaw=0;
 int timeout = 10;
 float u_front_wheel;
 float dir_front_wheel;
@@ -157,6 +166,9 @@ float filtered_current_kalman = 0;
 float torque = 0;
 float resolution = 65336 - 1;
 float Vref = 3.3; //avevano messo 5 non so perche, cosi dava problemi per la lettura dell'adc
+
+BluetoothSerial serialBt;
+
 
 const float K = 0.0234;
 int n_ref = 0;
@@ -247,6 +259,8 @@ static void MX_TIM4_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM8_Init(void);
+static void MX_TIM6_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void MX_GPIO_Init(void);
 
@@ -396,12 +410,18 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM3_Init();
   MX_TIM8_Init();
+  MX_TIM6_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 	HAL_TIM_Base_Start_IT(&htim2);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 	HAL_TIM_Base_Start(&htim4);
 	HAL_TIM_Base_Start(&htim8);
+
+	HAL_TIM_Base_Start_IT(&htim6);
+	 HAL_UART_Receive_IT(&huart2, (uint8_t *)rx_buffer, 1);
+
 
 
 
@@ -432,11 +452,20 @@ int main(void)
 	tune_PID(&pid_speed, 7, 6, 0);
 	//*************************
 
+	init_PID(&pid_yaw_rate, dt, 45, -45);
+	//	tune_PID(&pid_roll, 0.00012*3,00012/10/3,00012/10); //prova ad alzare
+		tune_PID(&pid_yaw_rate, 1.1,19,0.12);
 	//*************************
 	//PID angolo roll
-	init_PID(&pid_roll, dt, 3*K, -3*K);
-	tune_PID(&pid_roll, 0.00012,0,0.00012*3); //prova ad alzare
+	init_PID(&pid_roll, dt, 10*K, -10*K);
+	tune_PID(&pid_roll, 0.0001,0,0); //prova ad alzare
 
+	Kproll;
+	tauI;
+	tauD;
+
+
+	//tune_PID(&pid_roll, 0.00015,0.00012/400,0.00012*225*10*3*5);
 	//*************************
 
 	//*************************
@@ -518,8 +547,11 @@ int main(void)
 					//stampa angoli eulero
 
 					//printf("Yaw: %+2.2f Roll: %+2.2f Pitch: %+2.2f \r\n", eul.x, eul.y, eul.z);
-					roll = -eul.y; //ottengo angolo di eulero
+					roll = -eul.y -2; //ottengo angolo di eulero
+					yaw = eul.x;
 
+					yaw_rate = (yaw-old_yaw)/dt;
+							old_yaw = yaw;
 					//controllo angolo di roll, se è troppo grande ferma tutto
 					if(roll>=30 || roll<=-30)
 						{sys_started=0;}
@@ -601,7 +633,7 @@ int main(void)
 					//******************************
 					//prima di usare l'encoder
 
-					desired_roll = 2; //l'angolo di equilibrio sono 2 gradi
+					desired_roll = 0; //l'angolo di equilibrio sono 2 gradi
 					desired_torque = PID_controller(&pid_roll, roll,desired_roll);
 					//******************************
 
@@ -1217,6 +1249,44 @@ static void MX_TIM4_Init(void)
 }
 
 /**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 20000-1;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 30000;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
+
+}
+
+/**
   * @brief TIM8 Initialization Function
   * @param None
   * @retval None
@@ -1264,6 +1334,54 @@ static void MX_TIM8_Init(void)
   /* USER CODE BEGIN TIM8_Init 2 */
 
   /* USER CODE END TIM8_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 

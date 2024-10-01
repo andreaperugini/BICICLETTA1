@@ -1,4 +1,4 @@
-Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
+Core/Src/stmlib.o: ../Core/Src/stmlib.c ../Core/Inc/stmlib.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
@@ -36,11 +36,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
- ../Core/Inc/bno055.h ../Core/Inc/PID.h ../Core/Inc/main.h \
- ../Core/Inc/DC_motor.h ../../Drivers/CMSIS/DSP/Include/arm_math.h \
- ../../Drivers/CMSIS/Include/cmsis_compiler.h ../Core/Inc/kalman.h \
- ../Core/Inc/systemDimension.h ../Core/Inc/systemDimension.h
-../Core/Inc/main.h:
+ ../Core/Inc/main.h
+../Core/Inc/stmlib.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 ../Core/Inc/stm32h7xx_hal_conf.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h:
@@ -78,12 +75,4 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
-../Core/Inc/bno055.h:
-../Core/Inc/PID.h:
 ../Core/Inc/main.h:
-../Core/Inc/DC_motor.h:
-../../Drivers/CMSIS/DSP/Include/arm_math.h:
-../../Drivers/CMSIS/Include/cmsis_compiler.h:
-../Core/Inc/kalman.h:
-../Core/Inc/systemDimension.h:
-../Core/Inc/systemDimension.h:
