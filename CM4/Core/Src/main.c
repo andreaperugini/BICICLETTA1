@@ -99,6 +99,14 @@ UART_HandleTypeDef huart3;
 char bufferDati[NUM_CAMPIONI * 110];
 int indiceBuffer = 0;
 float tempo = 0;
+uint8_t bytesricevuti[12];
+uint8_t bytesricevuti1[4];
+uint8_t bytesricevuti2[4];
+uint8_t bytesricevuti3[4];
+float floatricevuto1;
+float floatricevuto2;
+float floatricevuto3;
+int i = 0;
 
 //*******************
 //PID
@@ -112,7 +120,7 @@ int flag_BNO055_Data_Ready = 0;
 float flag_Tc = 0; //flag che viene settata ad 1 ogni 0.01 secondi dalla funzione di callback del timer2
 
 //VARIABILI PER PID RUOTA POSTERIORE
-float speed = 5.7 * 3.6; //velocita di regime della ruota dietro [m/s] credo //A QUESTA CORRISPONDE 6.7 KM/H, NON SO XK
+float speed = 0;// 5.7 * 3.6; //velocita di regime della ruota dietro [m/s] credo //A QUESTA CORRISPONDE 6.7 KM/H, NON SO XK
 float counts = 0; //counts per encoder
 float counts_steer = 0; //counts per encoder sterzo
 float delta_angle_degree_steer = 0; //delta angolo sterzo
@@ -147,6 +155,8 @@ float speed_degsec_steer_filtrata = 0;
 float speedsteernuovo[30];
 float speedsteervecchio[30];
 float angolo_sterzo = 0;
+float corrente_vecchia[170];
+float corrente_nuova[170];
 
 float velocitavecchia[30];
 float velocitanuova[30];
@@ -191,9 +201,11 @@ int n_ref = 0;
 //se scheda alimentata da batteria;
 const float a = 0.7937;
 //const float b= 2.4550-0.08-0.08-0.03;
-float b = 2.4550 - 0.08 - 0.08 + 0.015 * 1.5;
+float b = 2.535;
 
-const float lambda = -767528;
+
+
+const float lambda = -967528;
 float VoltSens = 0;
 
 typedef struct {
@@ -214,29 +226,33 @@ typedef struct {
 	float speed_metsec;
 	float u_back_wheel;
 	float tempo;
-	int contatore;
+	float corrente_non_filtrata;
+	float corrente_filtrata;
 
 } DatiBici;
 
 // Buffer per la ricezione dei dati dalla UART2
 char rx_buffer[1];
+char pid_buffer[3];
 
 uint8_t trasmissione_attiva = 0;
 Dati dati;
 DatiBici datibici;
 
 //dati delle matrici
-float32_t A_data[state_dim * state_dim] = { 1 / (1 - dt * lambda), -dt
-		* (lambda) * a / (1 - dt * lambda), 0, 1 };
+float32_t A_data[state_dim*state_dim] = {1/(1-dt*lambda), -dt*(lambda)*a/(1-dt*lambda),
+										0, 1};
 
-float32_t B_data[state_dim * control_dim] = { 1, 0 };
+float32_t B_data[state_dim*control_dim]= {1,
+										  0};
+
 
 float32_t H_data[measure_dim * state_dim] = { 1, 0, 0, 1 };
 
 float32_t Q_data[state_dim * state_dim] = { 0.00005, 0, 0, 0.0001 };
 
-float32_t R_data[measure_dim * measure_dim] = { 0.0220 * 2 * 2 * 2 * 2, 0, 0,
-		0.4655 * 2 * 2 * 2 * 2 };
+float32_t R_data[measure_dim * measure_dim] = { 0.0220 * 2 * 2 * 2 * 2*2, 0, 0,
+		0.4655 * 2 * 2 * 2 * 2 *2};
 float32_t P_data[state_dim * state_dim] = { 100, 0, 0, 100 };
 
 float32_t K_data[measure_dim * state_dim] = { 1, 1, 1, 1 };
@@ -333,7 +349,7 @@ float voltToAmpere(float Volt, float a, float b) {
 	//float ampere = (Volt-2.47)/0.22;  //a3b RESISTENZA
 	//float ampere = Volt*1.25994074 - 3.1119; //a3b MOTORE
 	//float ampere = (Volt -2.53)/0.8 + 0.095 + 0.065 + 0.07 ;
-	float ampere = (Volt - a) / b;
+	float ampere = (Volt - b) / a;
 
 	//float ampere = 2.3*Volt - 5.75;   //a4b DA RIVEDERE
 	//float ampere = (Volt-2.48)/0.185; //sensore ACS712 05b
@@ -357,7 +373,7 @@ float getSpeed(float actual_speed) {
 		return speed;
 }
 //******************
-
+// FUNZIONE PER IL FILTRO A MEDIA MOBILE
 float filtro_media_mobile(float *vettorenuovo, float *vettorevecchio,
 		float nuovamisurazione, int dimensione) {
 	vettorenuovo[0] = nuovamisurazione;
@@ -476,7 +492,7 @@ int main(void) {
 	//*************************
 	//PID angolo roll
 	init_PID(&pid_roll, dt, 10 * K, -10 * K);
-	tune_PID(&pid_roll, 0.00011, 0, 0); //prova ad alzare
+	tune_PID(&pid_roll, 0.00004, 0, 0); //prova ad alzare
 
 	Kproll;
 	tauI;
@@ -498,8 +514,8 @@ int main(void) {
 	arm_mat_init_f32(&z, measure_dim, 1, (float32_t*) &z_data);  // Misurazione
 	kalman_filter_init(&kf, &A_data, &B_data, &H_data, &Q_data, &R_data,
 			&P_data, &K_data, &x_data);
-	u_data[0] = -dt * lambda * b / (1 - dt * lambda);
-
+	u_data[0] =  ( -dt* lambda *b/(1 - dt* lambda ) );
+	//u_data[0]=b;
 	//*************************
 
 	/* USER CODE END 2 */
@@ -548,8 +564,8 @@ int main(void) {
 			if (flag_BNO055_Data_Ready == 1) {
 				flag_BNO055_Data_Ready = 0;
 
-				bno055_writeData(BNO055_SYS_TRIGGER, 0x40); //reset int
-				bno055_calibration_state_t cal = bno055_getCalibrationState();
+				//bno055_writeData(BNO055_SYS_TRIGGER, 0x40); //reset int
+				//bno055_calibration_state_t cal = bno055_getCalibrationState();
 
 				if (cal.sys != 3) {
 					// printf("GYR : %+2.2d | ACC : %+2.2d | MAG : %+2.2d | %+2.2d\r\n",
@@ -557,6 +573,7 @@ int main(void) {
 					bno055_calibrated = 1;
 				} else
 					bno055_calibrated = 1;
+
 
 				//bno055_calibrated = 1; //da togliere
 				if (bno055_calibrated) {
@@ -566,6 +583,7 @@ int main(void) {
 					//printf("Yaw: %+2.2f Roll: %+2.2f Pitch: %+2.2f \r\n", eul.x, eul.y, eul.z);
 					roll = -eul.y - 2; //ottengo angolo di eulero
 					yaw = eul.x;
+
 
 					yaw_rate = (yaw - old_yaw) / dt;
 					old_yaw = yaw;
@@ -619,7 +637,8 @@ int main(void) {
 						//ciclo per trovare la costante b della eq della corrente
 						//nuovo_valore_b
 						//per una corrente nulla, V=aI+b=b  quindi b è data dal voltaggio a riposo, che sta nella variabile x_data[0]
-						b = x_data[0];
+						//b = x_data[0];
+
 						//setto l'angolo del manubrio a 0
 						angle_steer = 0;
 						sys_started++;
@@ -699,7 +718,7 @@ int main(void) {
 					CountValue = HAL_ADC_GetValue(&hadc1);
 					volt = ((float) CountValue) * Vref / (resolution);
 					HAL_ADC_Stop(&hadc1);
-					VoltSens = volt * 1.524 - 0.1018;
+					VoltSens = volt * 1.56;
 					corrente_non_filtrata = voltToAmpere(VoltSens, a, b);
 
 					//filtro non funzionante del gruppo precedente
@@ -717,6 +736,7 @@ int main(void) {
 					kalman_update(&kf, &z);
 					filtered_current_kalman = x_data[1];
 
+					//filtered_current_kalman = filtro_media_mobile(corrente_vecchia, corrente_nuova, corrente_non_filtrata, 170);
 					//calcolo coppia
 					torque = filtered_current_kalman * K;
 
@@ -791,7 +811,7 @@ int main(void) {
 
 					//controllo angolo limite manubrio
 					//quando la u è negativa, l'angolo diminuisce
-
+/*
 					if (angle_steer <= -90) {
 						if (u_front_wheel < 0)
 							u_front_wheel = 0;
@@ -802,6 +822,8 @@ int main(void) {
 							u_front_wheel = 0;
 
 					}
+
+					*/
 
 					if (sys_started <= 1) {
 						//stadio = 1000; utile se hai l'algoritmo per il segnale trapezoidale
@@ -842,7 +864,7 @@ int main(void) {
 					 printf("%.5f ",u_back_wheel/18.0*12);
 
 					 */
-					printf("\r\n");
+					//printf("\r\n");
 
 					//******************************
 
@@ -854,6 +876,8 @@ int main(void) {
 					dati.accelerazione = 9.82;
 					dati.tempo = 23.02;
 
+					//angle_steer  = 100*sin(2*3.14/5*tempo);
+					trasmissione_attiva=1;
 					if (trasmissione_attiva == 1) {
 						//dati bicicletta
 						datibici.angle_steer = angle_steer;
@@ -866,22 +890,44 @@ int main(void) {
 						datibici.u_back_wheel = u_back_wheel;
 						datibici.u_front_wheel = u_front_wheel;
 						datibici.tempo = tempo;
-						datibici.contatore = contatore_esp320;
+						datibici.corrente_non_filtrata = corrente_non_filtrata;
+						datibici.corrente_filtrata = filtered_current_kalman;
 
 						int bytesWritten = sprintf(&bufferDati[indiceBuffer],
-								"%f,%f,%f,%f,%f,%f,%f,%f,%f,%d\n",
+								"%f,%f,%f,%f,%f,%f,%f,%f,%f,%f%d\n",
 								datibici.angle_steer,
 								datibici.desired_filtered_torque,
 								datibici.desired_speed_metsec, datibici.roll,
 								datibici.speed_metsec, datibici.torque,
 								datibici.u_back_wheel, datibici.u_front_wheel,
-								datibici.tempo, datibici.contatore);
+								datibici.tempo, datibici.corrente_non_filtrata,
+								datibici.corrente_filtrata);
 						indiceBuffer += bytesWritten;
 						//	if(indiceBuffer >200000) indiceBuffer = 0;  //dovrebbe andarci solo quando la comunicazione non  avviene. altrimenti crasha
+
+						/*
+						printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f%d\r\n",datibici.angle_steer,
+								datibici.desired_filtered_torque,
+								datibici.desired_speed_metsec, datibici.roll,
+								datibici.speed_metsec, datibici.torque,
+								datibici.u_back_wheel, datibici.u_front_wheel,
+								datibici.tempo, datibici.corrente_non_filtrata,
+								datibici.corrente_filtrata);
+						*/
+
+						printf("%f,%f\r\n", datibici.desired_filtered_torque,datibici.torque);
+
+
+
+
+
 					}
+
+
+
 				}
 
-				else printf("ciao");
+
 
 			}
 		}
@@ -1536,6 +1582,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim == &htim6) {
 
 		// Gestione dell’invio periodico dei dati
+
 		if (trasmissione_attiva == 1) {
 			/*
 			 char buffer[50];
@@ -1544,8 +1591,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 			 printf("Dati trasmessi: %s\r\n", buffer);
 			 //Trasmissione_dati(buffer, bytesWritten);
 			 * */
-			printf("Dati trasmessi: %s\r\n", bufferDati);
-			// Trasmissione_dati(bufferDati, indiceBuffer);
+			//printf("Dati trasmessi: %s\r\n", bufferDati);
+			//Trasmissione_dati(bufferDati, indiceBuffer);
 			indiceBuffer = 0;
 			memset(bufferDati, 0, sizeof(bufferDati));  // Pulizia buffer
 
@@ -1553,6 +1600,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	}
 }
+
+
+
+
+
+
 //*******************
 
 //******************
@@ -1587,9 +1640,54 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 			// Avvia la trasmissione
 			printf("Arrivato: %c\r\n", rx_buffer[0]);
 			trasmissione_attiva = 1;
+		} else if(rx_buffer[0] == 'P')
+		{
+			//HAL_UART_Receive_IT(&huart2, (uint8_t*) rx_buffer, 1); //
+			i=1;
+			// Ricevi 4 byte tramite UART (blocca fino a ricezione)
+			HAL_UART_Receive_IT(&huart2, &bytesricevuti, 12);
+			rx_buffer[0]=0;
+			// Ricostruisci il float dai 4 byte ricevuti
+			bytesricevuti1[0]=bytesricevuti[0];
+			bytesricevuti1[1]=bytesricevuti[1];
+			bytesricevuti1[2]=bytesricevuti[2];
+			bytesricevuti1[3]=bytesricevuti[3];
+			bytesricevuti2[0]=bytesricevuti[4];
+			bytesricevuti2[1]=bytesricevuti[5];
+			bytesricevuti2[2]=bytesricevuti[6];
+			bytesricevuti2[3]=bytesricevuti[7];
+			bytesricevuti3[0]=bytesricevuti[8];
+			bytesricevuti3[1]=bytesricevuti[9];
+			bytesricevuti3[2]=bytesricevuti[10];
+			bytesricevuti3[3]=bytesricevuti[11];
+
+
+			//printf("float: %f",floatricevuto);
+
+
 		}
 
+
+
+
 		HAL_UART_Receive_IT(&huart2, (uint8_t*) rx_buffer, 1); //
+		memcpy(&floatricevuto1, &bytesricevuti1, sizeof(float));
+		memcpy(&floatricevuto2, &bytesricevuti2, sizeof(float));
+		memcpy(&floatricevuto3, &bytesricevuti3, sizeof(float));
+
+		if(i==1)
+		{
+			tune_PID(&pid_roll, floatricevuto1, floatricevuto2, floatricevuto3); //prova ad alzare
+i=0;
+
+		}
+
+
+
+
+
+
+
 	}
 }
 // Funzione di scrittura per printf
