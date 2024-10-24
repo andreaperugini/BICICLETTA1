@@ -13,10 +13,12 @@
 #include "main.h"
 #include "stdint.h"
 
+/*
 float DegreeSec2RPM(float speed_degsec){
 	float speed_rpm = (speed_degsec * 60)/360;
 	return speed_rpm;
 }
+*/
 
 float Voltage2Duty(float u){
 	if(u <= 0){
@@ -45,10 +47,6 @@ uint8_t Ref2Direction(float y_ref){
 void set_PWM_and_dir_back_wheel(float duty, uint8_t direction){
 	TIM1 ->CCR1 = (duty/100.0)*TIM1->ARR;
 
-	//ARR:valore massimo che il contatore può raggiungere
-
-
-	//Qui non ho capito a che serve
 	if(direction == 0){
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
 	}else if(direction == 1){

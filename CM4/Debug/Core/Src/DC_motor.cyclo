@@ -2,4 +2,4 @@
 ../Core/Src/DC_motor.c:21:7:Voltage2Duty	4
 ../Core/Src/DC_motor.c:35:9:Ref2Direction	2
 ../Core/Src/DC_motor.c:45:6:set_PWM_and_dir_back_wheel	3
-../Core/Src/DC_motor.c:59:6:set_PWM_and_dir_front_wheel	3
+../Core/Src/DC_motor.c:55:6:set_PWM_and_dir_front_wheel	3
