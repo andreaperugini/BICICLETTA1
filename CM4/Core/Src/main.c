@@ -97,18 +97,23 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+UART_HandleTypeDef huart6;
+DMA_HandleTypeDef hdma_usart6_rx;
 
 /* USER CODE BEGIN PV */
 //*****************
 //COMUNICAZIONE ESP32
-char bufferDati[NUM_CAMPIONI * 110];
+char bufferDati[NUM_CAMPIONI * 170];
 int indiceBuffer = 0;
 float tempo = 0;
+float tempo_1ms = 0;
+float contatore_1ms = 0;
 uint8_t bytesricevuti[12];
 uint8_t bytesricevuti1[4];
 uint8_t bytesricevuti2[4];
@@ -127,12 +132,15 @@ struct PID pid_steering_torque;
 
 const float dt = 0.01; //?????
 float flag_Tc = 0; //flag che viene settata ad 1 ogni 0.01 secondi dalla funzione di callback del timer2
-
+int contatore_messaggi = 0;
 float flag_1ms = 0;
 float roll_kp = 0;
 float roll_ki = 0;
 float roll_kd = 0;
 //VARIABILI PER PID RUOTA POSTERIORE
+
+//float speed = 0;
+
 float speed = 1.8*5; //velocita di regime della ruota dietro [m/s] credo //A QUESTA CORRISPONDE 6.7 KM/H, NON SO XK
 float counts = 0; //counts per encoder
 float counts_steer = 0; //counts per encoder sterzo
@@ -201,6 +209,8 @@ float torque = 0;
 //float resolution = 4194304 - 1;//OVERSAMPLING RATIO 64
 
 float resolution = 4194304*2*2*2*2 - 1; //OVERSAMPLING RATIO 1024
+float iterazione = 0;
+float VoltSomma1ms = 0;
 
 
 float Vref = 3.3; //avevano messo 5 non so perche, cosi dava problemi per la lettura dell'adc
@@ -327,6 +337,7 @@ float32_t fir_in_arm, fir_out_arm, fir_state[FIR_LENGHT];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+static void MX_DMA_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
@@ -337,7 +348,9 @@ static void MX_TIM3_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM7_Init(void);
 static void MX_TIM12_Init(void);
+static void MX_USART6_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void MX_GPIO_Init(void);
 
@@ -464,6 +477,7 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+  MX_DMA_Init();
   MX_USART3_UART_Init();
   MX_I2C1_Init();
   MX_TIM1_Init();
@@ -474,13 +488,16 @@ int main(void)
   MX_TIM8_Init();
   MX_TIM6_Init();
   MX_USART2_UART_Init();
+  MX_TIM7_Init();
   MX_TIM12_Init();
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
 	HAL_TIM_Base_Start_IT(&htim2);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 	HAL_TIM_Base_Start(&htim4);
 	HAL_TIM_Base_Start(&htim8);
+	HAL_TIM_Base_Start_IT(&htim12);
 
 	HAL_TIM_Base_Start_IT(&htim6);
 	HAL_UART_Receive_IT(&huart2, (uint8_t*) rx_buffer, 1);
@@ -500,6 +517,9 @@ int main(void)
 	bno055_vector_t eul;
 	bno055_setOperationModeNDOF();
 
+
+
+
 	//calibrazione sensore???
 	bno055_calibration_state_t cal = bno055_getCalibrationState();
 	//printf("GYR : %+2.2d | ACC : %+2.2d | MAG : %+2.2d | %+2.2d\r\n", //questo andrebbe nel while per vedere se ha calibrato
@@ -513,24 +533,30 @@ int main(void)
 	//*************************
 
 	init_PID(&pid_yaw_rate, dt, 45, -45);
-	//	tune_PID(&pid_roll, 0.00012*3,00012/10/3,00012/10); //prova ad alzare
 	tune_PID(&pid_yaw_rate, 1.1, 19, 0.12);
 	//*************************
+
 	//PID angolo roll
 	init_PID(&pid_roll, dt, 10 * K, -10 * K);
-	//tune_PID(&pid_roll, +0.00015*2, 0.00015/50,  -0.00015/10/5); //prova ad alzare -0.00015*100000
-	//pid filtro prof tune_PID(&pid_roll, +0.00015*2,0, +0.00015/10/5); //prova ad alzare -0.00015*100000
 
-	//tune_PID(&pid_roll, +0.00015/2, 0.00015/4, 0); //prova ad alzare -0.00015*100000
 
-	//tune_PID(&pid_roll, +0.00015/2, 0.00015/80, +0.00015*10); //prova ad alzare -0.00015*100000
-	roll_kp = 0.00015*1.5;
-	//roll_ki = 0.00015/100/4;
+	//ULTIMO PID ROLL ATTIVO tune_PID(0.00015*1.5,0,0.00015*2*2);
+	//nuovo pid roll
+	roll_kp = 0.00015*2.5;
+	roll_ki =0;
+	roll_kd= 0;
+	tune_PID(&pid_roll, roll_kp, roll_ki, roll_kd);
 
+
+
+	/*4/11/24 carino, con laltro 30000 e 20000
+	 * roll_kp = 0.00015*1.5;
 	roll_ki =0;
 	roll_kd=0.00015*2*2;
-
 	tune_PID(&pid_roll, roll_kp, roll_ki, roll_kd);
+	*/
+	//bno055_configureAccelerometer(2,7.81, 0);
+
 
 	//buonotune_PID(&pid_roll, +0.00015/2, 0.00015/3, +0.00015*6); //prova ad alzare -0.00015*100000
 
@@ -544,12 +570,15 @@ int main(void)
 
 
 	//tune_PID(&pid_steering_torque, 30000*3, 20000 * 2, 0);
-	tune_PID(&pid_steering_torque, 30000*3.5, 20000 * 1.5, 0); // migliore con roll_pid_attuale
+	//Questo era lultimo attivo tune_PID(&pid_steering_torque, 30000*3.5, 20000 * 1.5, 0); // migliore con roll_pid_attuale
 	//16:48 tune_PID(&pid_steering_torque, 30000*4, 20000 * 1.5, 0); // altro migliore
 
 	//tune_PID(&pid_steering_torque, 30000*4, 20000 * 2, 0); // migliore pid che mantiene l'equilibrio
-	//prima 30000 20000*5 0
+
 	//*************************
+	//nuovi tentativi
+	tune_PID(&pid_steering_torque,30000,5000,10000); // migliore con roll_pid_attuale
+
 
 	//*************************
 	//Filtro di Kalman per corrente
@@ -587,14 +616,11 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-		if(flag_Tc != 0 && flag_1ms ==1)
-		{
 
-		}
-
+		//printf("Inizio \r\n");
 		if (flag_Tc == 1) {
 			flag_Tc = 0;
-
+			//printf("1: %.3f\r\n", tempo_1ms);
 			if ((tasto_premuto == 1) && (tasto_appena_premuto == 1)) {
 				tempo_iniziale = n_ref * dt;
 				tasto_appena_premuto = 2;
@@ -626,16 +652,18 @@ int main(void)
 			//##             BNO055			     ##
 			//#####################################
 			//*******************************
+			//printf("2: %.3f\r\n", tempo_1ms);
 
 			eul = bno055_getVectorEuler();
 			//stampa angoli eulero
 			//printf("Yaw: %+2.2f Roll: %+2.2f Pitch: %+2.2f \r\n", eul.x, eul.y, eul.z);
 
-			roll = -eul.y + 1.6; //ottengo angolo di eulero (il sensore è leggermente inclinato rispetto al piano in cui giace la bicicletta)
+			roll = -eul.y + 1.6 - 5 + 2; //ottengo angolo di eulero (il sensore è leggermente inclinato rispetto al piano in cui giace la bicicletta)
 			yaw = eul.x; //ottengo angolo di yaw
 
 			yaw_rate = (yaw - old_yaw) / dt;
 			old_yaw = yaw;
+			//printf("3: %.3f\r\n", tempo_1ms);
 
 			//controllo angolo di roll, se è troppo grande ferma tutto
 			if (roll >= roll_limite || roll <= -1 * roll_limite) {
@@ -674,7 +702,6 @@ int main(void)
 			//******************************+
 			//PID ruota dietro
 			desired_speed_metsec = getSpeed(desired_speed_metsec); //funzione che crea un riferimento a rampa e poi costante per la velocita della ruota dietro
-			desired_speed_rpm = DegreeSec2RPM(desired_speed_metsec / radius); //inutile per ora
 			u_back_wheel = PID_controller(&pid_speed, speed_metsec,	desired_speed_metsec);
 			//******************************
 
@@ -768,13 +795,22 @@ int main(void)
 			//##            STERZO			     ##
 			//#####################################
 			//******************************
-			//Calcolo valore corrente
-			HAL_ADC_Start(&hadc1);
-			HAL_ADC_PollForConversion(&hadc1, timeout);
-			CountValue = HAL_ADC_GetValue(&hadc1);
-			volt = ((float) CountValue) * Vref / (resolution);
-			HAL_ADC_Stop(&hadc1);
-			VoltSens = (volt + D) * 1.5059;
+
+			if(iterazione!= 0)	VoltSens = VoltSomma1ms/iterazione;
+			else{
+				//Calcolo valore corrente
+				HAL_ADC_Start(&hadc1);
+				HAL_ADC_PollForConversion(&hadc1, timeout);
+				CountValue = HAL_ADC_GetValue(&hadc1);
+				volt = ((float) CountValue) * Vref / (resolution);
+				HAL_ADC_Stop(&hadc1);
+				VoltSens = (volt + D) * 1.5059;
+			}
+
+
+			iterazione=0;
+			VoltSomma1ms=0;
+
 			corrente_non_filtrata = voltToAmpere(VoltSens, a, b);
 
 			//filtro non funzionante del gruppo precedente
@@ -783,6 +819,7 @@ int main(void)
 			 arm_fir_f32(&fir_instance, &fir_in_arm, &fir_out_arm, 1);
 			 filtered_current = fir_out_arm;
 			 */
+
 
 			//Filtro di Kalman per corrente
 			//setta i valori di input e di misura per il filtro di kalman
@@ -937,7 +974,7 @@ int main(void)
 			datibici.torque = torque;
 			datibici.u_back_wheel = u_back_wheel;
 			datibici.u_front_wheel = u_front_wheel;
-			datibici.tempo = tempo;
+			datibici.tempo = tempo_1ms;
 			datibici.corrente_non_filtrata = corrente_non_filtrata;
 			datibici.corrente_filtrata = filtered_current_kalman;
 			datibici.desired_torque = desired_torque;
@@ -966,7 +1003,14 @@ int main(void)
 			//printf("%f,%f\r\n", datibici.corrente_non_filtrata, datibici.corrente_filtrata);
 			//printf("%f, \r\n" datibici.corrente_non_filtrata);
 
-			 printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\r\n",
+			//printf("%f\r\n", tempo_1ms);
+			/*stampa dati ogni 2 centesimi di secondi
+			*/
+
+			if(contatore_messaggi >= 20) //cioe ogni 20 millisecondi
+			{
+				contatore_messaggi = 0;
+			 printf("%.2f,%f,%.2f,%.2f,%.2f,%f,%.3f,%.4f,%f,%f,%f,%f,%.2f,%.2f,%.3f,%.1f,%.1f,%.1f\r\n",
 									 datibici.angle_steer,
 							 datibici.desired_filtered_torque,
 							 datibici.desired_speed_metsec,
@@ -983,10 +1027,45 @@ int main(void)
 							 datibici.Volt_sens,
 							 datibici.costanteD,
 							 datibici.Kp,
-			 datibici.Ki,
-			 datibici.Kd
+							 datibici.Ki,
+							 datibici.Kd
 
 			 );
+			}
+			//printf("%f,%f\r\n",datibici.corrente_non_filtrata,datibici.corrente_filtrata);
+
+
+			/*
+			int bytesWritten = sprintf(&bufferDati[indiceBuffer],
+					"%.2f,%f,%.3f,%.3f,%.3f,%f,%.3f,%.3f,%.3f,%.3f,%f,%f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",
+														 datibici.angle_steer,
+												 datibici.desired_filtered_torque,
+												 datibici.desired_speed_metsec,
+												 datibici.roll,
+												 datibici.speed_metsec,
+												 datibici.torque,
+												 datibici.u_back_wheel,
+												 datibici.u_front_wheel,
+												 datibici.tempo,
+												 datibici.corrente_non_filtrata,
+												 datibici.corrente_filtrata,
+								 	 	 	 	 datibici.desired_torque,
+												 datibici.Volt_Adc,
+												 datibici.Volt_sens,
+												 datibici.costanteD,
+												 datibici.Kp,
+												 datibici.Ki,
+												 datibici.Kd);
+*/
+			int bytesWritten = sprintf(&bufferDati[indiceBuffer],
+								"%f,%f\r\n",
+								datibici.tempo,
+								datibici.torque);
+
+
+			indiceBuffer += bytesWritten;
+
+			//printf("4: %.3f\r\n", tempo_1ms);
 
 			if (trasmissione_attiva == 1) {
 				//dati bicicletta
@@ -1004,17 +1083,31 @@ int main(void)
 
 
 
-
-
-
-
-
-
-
-
 			}
 
 		}
+		else
+				{
+
+			 //qua il calcolo della coppia, nella tesi avveniva solo una volta, successivamente
+			// ho fatto in modo che venisse fatta piu frequentemente mettendola qui
+			// PRO: segnale piu pulito CONTRO: non fa sempre la stessa quantita di misure, a volte
+			//è piu pulito e a volte meno, l'idea è mettere un massimo di volte in cui fa le misurazioni, tipo max = 15
+				if(iterazione <=15)
+				{
+					//calcolo corrente
+					HAL_ADC_Start(&hadc1);
+					HAL_ADC_PollForConversion(&hadc1, timeout);
+					CountValue = HAL_ADC_GetValue(&hadc1);
+					volt = ((float) CountValue) * Vref / (resolution);
+					HAL_ADC_Stop(&hadc1);
+					VoltSens = (volt + D) * 1.5059;
+					corrente_non_filtrata = voltToAmpere(VoltSens, a, b);
+
+					VoltSomma1ms += VoltSens;
+					iterazione++;
+				}
+				}
 	}
 
   /* USER CODE END 3 */
@@ -1461,6 +1554,44 @@ static void MX_TIM6_Init(void)
 }
 
 /**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 200-1;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 1000-1;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
   * @brief TIM8 Initialization Function
   * @param None
   * @retval None
@@ -1653,6 +1784,70 @@ static void MX_USART3_UART_Init(void)
 }
 
 /**
+  * @brief USART6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART6_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART6_Init 0 */
+
+  /* USER CODE END USART6_Init 0 */
+
+  /* USER CODE BEGIN USART6_Init 1 */
+
+  /* USER CODE END USART6_Init 1 */
+  huart6.Instance = USART6;
+  huart6.Init.BaudRate = 115200;
+  huart6.Init.WordLength = UART_WORDLENGTH_8B;
+  huart6.Init.StopBits = UART_STOPBITS_1;
+  huart6.Init.Parity = UART_PARITY_NONE;
+  huart6.Init.Mode = UART_MODE_TX_RX;
+  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart6.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart6.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart6.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart6, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart6, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART6_Init 2 */
+
+  /* USER CODE END USART6_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -1670,6 +1865,7 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
@@ -1741,9 +1937,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	}
 
+	if (htim == &htim12){
+			flag_1ms = 1;
+			if(tempo_1ms >1000) contatore_1ms = 0;
+			else contatore_1ms++;
+			tempo_1ms = contatore_1ms/1000;
+
+			contatore_messaggi++;
+
+
+
+
+
+		}
+
 	if (htim == &htim6) {
 
 		// Gestione dell’invio periodico dei dati
+
+		//printf(bufferDati,indiceBuffer);
+		indiceBuffer = 0;
+		memset(bufferDati, 0, sizeof(bufferDati));
 
 		if (trasmissione_attiva == 1) {
 			/*
@@ -1763,11 +1977,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 		}
 
+
+
+
+
 	}
 
-	if (htim == &htim12){
-		flag_1ms = 1;
-	}
+
 }
 
 //*******************
@@ -1775,7 +1991,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 //******************
 //INPUT E OUTPUT USART
 int __io_putchar(int ch) {
-	HAL_UART_Transmit(&huart3, (uint8_t*) &ch, 1, 0xFFFF);
+	//HAL_UART_Transmit(&huart3, (uint8_t*) &ch, 1, 0xFFFF); putty
+	HAL_UART_Transmit(&huart6,(uint8_t*) &ch, 1, 0xFFFF);
+
 	return ch;
 }
 int __io_getchar(void) {

@@ -1,5 +1,4 @@
-../Core/Src/DC_motor.c:16:7:DegreeSec2RPM	24	static
-../Core/Src/DC_motor.c:21:7:Voltage2Duty	24	static
-../Core/Src/DC_motor.c:35:9:Ref2Direction	24	static
-../Core/Src/DC_motor.c:45:6:set_PWM_and_dir_back_wheel	24	static
-../Core/Src/DC_motor.c:55:6:set_PWM_and_dir_front_wheel	16	static
+../Core/Src/DC_motor.c:23:7:Voltage2Duty	24	static
+../Core/Src/DC_motor.c:37:9:Ref2Direction	24	static
+../Core/Src/DC_motor.c:47:6:set_PWM_and_dir_back_wheel	24	static
+../Core/Src/DC_motor.c:57:6:set_PWM_and_dir_front_wheel	16	static
