@@ -49,6 +49,8 @@
 #define INTERVALLO_CAMPIONAMENTO 10   // Campionamento ogni 0.01 secondi (10 ms)
 #define TEMPO_TRASMISSIONE 3000     // Trasmissione ogni 3 secondi
 #define NUM_CAMPIONI (TEMPO_TRASMISSIONE / INTERVALLO_CAMPIONAMENTO)
+#define M_PI 3.14159265358979323846
+
 
 //parametri encoder
 #define ppr 4
@@ -164,7 +166,7 @@ float speed_degsec_back = 0;
 float angle_back_wheel = 0;
 
 
-float volt_D[4]; //misure per settare la costante D
+float volt_D[20]; //misure per settare la costante D
 float sommaVolt = 0;
 float Kproll;
 float tauI;
@@ -182,6 +184,7 @@ float angolo_sterzo = 0;
 float corrente_vecchia[170];
 float corrente_nuova[170];
 
+float u_f_p = 0;
 float velocitavecchia[30];
 float velocitanuova[30];
 float speed_degsec_filtrata = 0;
@@ -577,7 +580,10 @@ int main(void)
 
 	//*************************
 	//nuovi tentativi
-	tune_PID(&pid_steering_torque,30000,5000,10000); // migliore con roll_pid_attuale
+	//tune_PID(&pid_steering_torque,30000,5000,10000); // migliore con roll_pid_attuale
+//grafico1
+	tune_PID(&pid_steering_torque,42000,0,0); // migliore con roll_pid_attuale
+
 
 
 	//*************************
@@ -591,7 +597,7 @@ int main(void)
 	//*************************
 
 	//SETTO D PER LE MISURE DELL'ADC
-	for(int op = 0; op<4; op++)
+	for(int op = 0; op<20; op++)
 	{
 		HAL_ADC_Start(&hadc1);
 		HAL_ADC_PollForConversion(&hadc1, timeout);
@@ -604,7 +610,7 @@ int main(void)
 
 
 	//prendo 4 misurazione e faccio la media
-	D = 1.68 - sommaVolt/4;
+	D = 1.68 - sommaVolt/20;
 	sommaVolt=0;
 
   /* USER CODE END 2 */
@@ -703,6 +709,7 @@ int main(void)
 			//PID ruota dietro
 			desired_speed_metsec = getSpeed(desired_speed_metsec); //funzione che crea un riferimento a rampa e poi costante per la velocita della ruota dietro
 			u_back_wheel = PID_controller(&pid_speed, speed_metsec,	desired_speed_metsec);
+			u_back_wheel = 0;
 			//******************************
 
 
@@ -744,7 +751,26 @@ int main(void)
 			//prima di usare l'encoder
 
 			desired_roll = 0; //l'angolo di equilibrio sono 2 gradi
-			desired_torque = PID_controller(&pid_roll, roll, desired_roll);
+			//desired_torque = PID_controller(&pid_roll, roll, desired_roll);
+
+			/*
+			if(tempo<=10) desired_torque = 0;
+			if(tempo>10 && tempo<18) desired_torque = 0.0015;
+			if(tempo>18 && tempo<24) desired_torque = -0.0015;
+			if(tempo>24) desired_torque = 0;
+*/
+
+/*
+			if((int)trunc(tempo/5) % 2 == 0)
+				desired_torque = 0.0015;
+
+			else desired_torque = -0.0015;
+*/
+			periodi = 2;
+			desired_torque = 0.003*sin(2*M_PI*tempo/periodi);
+
+
+
 			//******************************
 
 			//encoder per ruota anteriore
@@ -897,14 +923,21 @@ int main(void)
 			 }
 
 
-			 */
+		*/
+
+
+
 
 			u_front_wheel = PID_controller(&pid_steering_torque, torque,
 					desired_filtered_torque);
 
+
+
+
 			//controllo angolo limite manubrio
 			//quando la u è negativa, l'angolo diminuisce
 
+			/*
 			 if (angle_steer <= -90) {
 			 if (u_front_wheel < 0)
 			 u_front_wheel = 0;
@@ -915,16 +948,20 @@ int main(void)
 			 u_front_wheel = 0;
 
 			 }
+			 */
 
 
 
 			if (sys_started <= 1) {
-				//stadio = 1000; utile se hai l'algoritmo per il segnale trapezoidale
+				stadio = 1000; //utile se hai l'algoritmo per il segnale trapezoidale
 				desired_speed_metsec = 0;
 				u_back_wheel = 0;
 				u_front_wheel = 0;
 
 			}
+
+
+			u_f_p = u_front_wheel;
 
 			duty_front_wheel = Voltage2Duty(u_front_wheel);
 			dir_front_wheel = Ref2Direction(u_front_wheel);
